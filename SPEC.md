@@ -271,7 +271,7 @@ High-level user journey:
 - RPM filter awareness: RPM state detection via MSP/BBL headers, RPM-aware filter bounds, dynamic notch optimization
 - Flight style preferences: Smooth/Balanced/Aggressive selector in profiles, style-based PID thresholds, preset defaults, UI context display
 - BF version policy: min 4.3 (API 1.44), version gate on connect, version-aware debug mode
-- Comprehensive testing plan: 9-phase plan adding 464 tests. See [docs/COMPREHENSIVE_TESTING_PLAN.md](./docs/COMPREHENSIVE_TESTING_PLAN.md).
+- Comprehensive testing plan: 9-phase plan adding 464 tests. See [docs/complete/COMPREHENSIVE_TESTING_PLAN.md](./docs/complete/COMPREHENSIVE_TESTING_PLAN.md).
 - Verification flight: mandatory per-mode verification via "Erase & Verify" (Filter Tune: throttle sweep, PID Tune: stick snaps, Flash Tune: hover)
 - Navigation breadcrumb in AnalysisOverview, snapshot/analysis UX fixes
 - Tuning history & comparison: session archive per profile, completion summary with noise spectrum overlay, applied changes table, PID metrics, expandable history panel
@@ -334,7 +334,7 @@ Automated Playwright E2E tests that launch the real Electron app in demo mode (m
 - 7 Flash Tune cycle tests: Flash Tune cycle with parallel analysis, apply all, erase & verify, download, analyze verification, complete, dismiss, history check
 - 5-cycle history generator: `npm run demo:generate-history` for populating tuning history with progressive quality scores
 - `advancePastVerification()` fix: keeps mock FC flight type cycle in sync when verification is skipped across multiple cycles
-- Total: 37 Playwright E2E tests across 7 spec files (25 in normal runs + generators/stress/diagnostic)
+- Total: 37 Playwright E2E tests across 7 spec files (32 in normal runs — smoke + 3 tuning cycles + diagnostic — plus generators/stress)
 
 #### 7b: Real FC E2E :x:
 Automated end-to-end tests running in CI pipeline against a real FC connected to a dedicated machine.
@@ -357,7 +357,7 @@ Automated end-to-end tests running in CI pipeline against a real FC connected to
 
 ## Progress Summary
 
-**Last Updated:** April 11, 2026 | **Tests:** 3111 unit tests across 145 files + 37 Playwright E2E tests | **PRs Merged:** #1–#432
+**Last Updated:** July 6, 2026 | **Tests:** 3189 unit tests across 145 files + 37 Playwright E2E tests | **PRs Merged:** #1–#432
 
 | Phase | Status | Notes |
 |-------|--------|-------|

@@ -21,6 +21,12 @@ export const DYNAMIC_LOWPASS_MIN_BANDS = 3;
 /** Minimum Pearson correlation between throttle level and noise floor to confirm trend */
 export const DYNAMIC_LOWPASS_MIN_CORRELATION = 0.6;
 
+/** Noise increase (dB) below which an ACTIVE dynamic lowpass is recommended for
+ * disabling. Deliberately lower than the 6 dB enable threshold (hysteresis) —
+ * a quad measuring ~5-6 dB between flights would otherwise flip dynamic lowpass
+ * on and off across alternating sessions. */
+export const DYNAMIC_LOWPASS_DISABLE_DB = 4;
+
 // ---- Types ----
 
 export interface DynamicLowpassAnalysis {
@@ -195,7 +201,10 @@ export function recommendDynamicLowpass(
   }
 
   // No throttle-dependent noise but dynamic IS active → recommend disabling
-  // (dynamic adds complexity for no benefit when noise is uniform across throttle)
+  // (dynamic adds complexity for no benefit when noise is uniform across throttle).
+  // Hysteresis: only disable when clearly BELOW the enable threshold — deltas in
+  // the 4-6 dB gray zone leave the current config untouched.
+  if (analysis.noiseIncreaseDeltaDb >= DYNAMIC_LOWPASS_DISABLE_DB) return [];
   const recs: FilterRecommendation[] = [];
   if (gyroDynActive) {
     recs.push({

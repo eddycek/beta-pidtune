@@ -232,6 +232,37 @@ describe('PIDRecommender', () => {
       expect(dRec!.reason).toContain('scillation');
     });
 
+    it('should relax the yaw ringing threshold ×1.5 (like overshoot/sluggish)', () => {
+      // Balanced ringingMax = 2 → yaw threshold = 3. Yaw needs D > 0 for D recs.
+      const yawDPids: PIDConfiguration = {
+        roll: { P: 45, I: 80, D: 30 },
+        pitch: { P: 47, I: 84, D: 32 },
+        yaw: { P: 45, I: 80, D: 20 },
+      };
+      const ringing3 = makeProfile({
+        responses: [makeResponse({ ringingCount: 3 })],
+        meanOvershoot: 5,
+      });
+
+      // ringingCount 3 on yaw: 3 > 2×1.5 is false → no yaw D rec
+      const recsAtThreshold = recommendPID(emptyProfile(), emptyProfile(), ringing3, yawDPids);
+      expect(recsAtThreshold.find((r) => r.setting === 'pid_yaw_d')).toBeUndefined();
+
+      // Same ringingCount 3 on roll: 3 > 2 → roll D rec fires (unrelaxed)
+      const recsRoll = recommendPID(ringing3, emptyProfile(), emptyProfile(), yawDPids);
+      expect(recsRoll.find((r) => r.setting === 'pid_roll_d')).toBeDefined();
+
+      // ringingCount 4 on yaw: 4 > 3 → yaw D rec fires
+      const ringing4 = makeProfile({
+        responses: [makeResponse({ ringingCount: 4 })],
+        meanOvershoot: 5,
+      });
+      const recsAbove = recommendPID(emptyProfile(), emptyProfile(), ringing4, yawDPids);
+      const yawD = recsAbove.find((r) => r.setting === 'pid_yaw_d');
+      expect(yawD).toBeDefined();
+      expect(yawD!.ruleId).toBe('P-RING-D-yaw');
+    });
+
     it('should respect P gain safety bounds', () => {
       // PIDs already at max
       const maxPIDs: PIDConfiguration = {
@@ -992,9 +1023,11 @@ describe('PIDRecommender', () => {
       }
     });
 
-    it('Rule TF-4: should recommend I increase when DC gain is below -1 dB', () => {
+    it('Rule TF-4: should recommend I +5 for mild DC gain deficit (balanced threshold −0.446 dB)', () => {
+      // Balanced steadyStateErrorMax = 5% → threshold = 20·log10(0.95) ≈ −0.446 dB.
+      // −0.6 dB is below threshold but under 2×|threshold| (−0.891) → +5 / low.
       const tf: TransferFunctionContext = {
-        roll: makeTFMetrics({ dcGainDb: -2.5 }),
+        roll: makeTFMetrics({ dcGainDb: -0.6 }),
       };
 
       const recs = recommendPID(
@@ -1013,6 +1046,83 @@ describe('PIDRecommender', () => {
       expect(iRec!.recommendedValue).toBe(DEFAULT_PIDS.roll.I + 5);
       expect(iRec!.confidence).toBe('low');
       expect(iRec!.reason).toContain('DC gain');
+    });
+
+    it('Rule TF-4: should recommend I +10 with medium confidence when deficit > 2× threshold', () => {
+      // −2.5 dB deficit is well over 2 × 0.446 → escalated step
+      const tf: TransferFunctionContext = {
+        roll: makeTFMetrics({ dcGainDb: -2.5 }),
+      };
+
+      const recs = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'balanced',
+        tf
+      );
+
+      const iRec = recs.find((r) => r.setting === 'pid_roll_i');
+      expect(iRec).toBeDefined();
+      expect(iRec!.recommendedValue).toBe(DEFAULT_PIDS.roll.I + 10);
+      expect(iRec!.confidence).toBe('medium');
+    });
+
+    it('Rule TF-4: threshold is style-aware — smooth (8% → −0.724 dB) tolerates −0.5 dB', () => {
+      const tf: TransferFunctionContext = {
+        roll: makeTFMetrics({ dcGainDb: -0.5 }),
+      };
+
+      const recs = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'smooth',
+        tf
+      );
+
+      // −0.5 dB is above the smooth threshold (−0.724) → no I rec
+      const iRec = recs.find((r) => r.setting === 'pid_roll_i');
+      expect(iRec).toBeUndefined();
+    });
+
+    it('Rule TF-4: aggressive threshold is floored at −0.4 dB (measurement-noise guard)', () => {
+      // Aggressive style alone would give −0.265 dB, but the −0.4 dB floor wins:
+      // a −0.35 dB reading (inside Wiener noise) must NOT trigger, −0.5 dB must.
+      const noTrigger = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'aggressive',
+        { roll: makeTFMetrics({ dcGainDb: -0.35 }) }
+      );
+      expect(noTrigger.find((r) => r.setting === 'pid_roll_i')).toBeUndefined();
+
+      const recs = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'aggressive',
+        { roll: makeTFMetrics({ dcGainDb: -0.5 }) }
+      );
+
+      // −0.5 dB exceeds the floored threshold (−0.4) but is under 2× (−0.8) → +5 / low
+      const iRec = recs.find((r) => r.setting === 'pid_roll_i');
+      expect(iRec).toBeDefined();
+      expect(iRec!.recommendedValue).toBe(DEFAULT_PIDS.roll.I + 5);
+      expect(iRec!.confidence).toBe('low');
     });
 
     it('Rule TF-4: should recommend I +10 for severe DC gain deficit (>3 dB)', () => {
@@ -1547,7 +1657,9 @@ describe('PIDRecommender', () => {
       );
 
       const pitchP = recs.find((r) => r.setting === 'pid_pitch_p');
-      const pitchD = recs.find((r) => r.setting === 'pid_pitch_d');
+      // The blocked D increase is replaced by an informational rec; the damping
+      // ratio validator then adds a real (non-informational) D decrease.
+      const pitchD = recs.find((r) => r.setting === 'pid_pitch_d' && !r.informational);
       expect(pitchP).toBeDefined();
       expect(pitchP!.recommendedValue).toBe(37); // P reduced by overshoot rule
       expect(pitchD).toBeDefined();
@@ -1555,6 +1667,48 @@ describe('PIDRecommender', () => {
       // Resulting ratio should be within bounds
       const resultRatio = pitchD!.recommendedValue / pitchP!.recommendedValue;
       expect(resultRatio).toBeLessThanOrEqual(DAMPING_RATIO_MAX);
+    });
+
+    it('should replace blocked D increase with informational "improve filters first" rec', () => {
+      const recs = recommendPID(
+        overshooting,
+        overshooting,
+        makeProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'balanced',
+        undefined,
+        { roll: 0.1, pitch: 0.1, yaw: 0, overall: 0.1, dCritical: false }
+      );
+
+      const blocked = recs.find((r) => r.ruleId === 'P-DTE-BLOCK-pid_roll_d');
+      expect(blocked).toBeDefined();
+      expect(blocked!.setting).toBe('pid_roll_d');
+      expect(blocked!.recommendedValue).toBe(blocked!.currentValue); // no change
+      expect(blocked!.recommendedValue).toBe(DEFAULT_PIDS.roll.D);
+      expect(blocked!.confidence).toBe('low');
+      expect(blocked!.informational).toBe(true);
+      expect(blocked!.reason).toMatch(/filter/i);
+    });
+
+    it('should not count the informational P-DTE-BLOCK rec as an actionable D increase', () => {
+      const recs = recommendPID(
+        overshooting,
+        overshooting,
+        makeProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'balanced',
+        undefined,
+        { roll: 0.1, pitch: 0.1, yaw: 0, overall: 0.1, dCritical: false }
+      );
+
+      const actionableDIncrease = recs.find(
+        (r) => r.setting.includes('_d') && !r.informational && r.recommendedValue > r.currentValue
+      );
+      expect(actionableDIncrease).toBeUndefined();
     });
 
     it('should add moderate noise warning when D ratio is in balanced range', () => {
@@ -1714,15 +1868,46 @@ describe('PIDRecommender', () => {
 });
 
 describe('quad-size-aware PID bounds', () => {
-  it('should clamp D to smaller max for tiny whoops (1")', () => {
-    // 1" quad: dMax=50, pMax=80. Moderate overshoot (20%) → D+5 from 20 = 25.
-    // No P decrease (severity < 2 and D < 60% of 50=30). D only case.
-    // Damping ratio: D=25/P=60 = 0.42 < 0.45 → underdamped add won't conflict.
-    // Use high D near max to verify 1" dMax clamp.
+  it('should clamp D to 1" dMax=80 (whoop presets run D 57-79)', () => {
+    // 1" quad: dMax=80, pMax=90 (raised from 50/80 — whoop_justice/ayyykayyy
+    // presets cluster P 63-83 / D 57-79). Moderate overshoot (20%) → D+5.
+    // P=82: moderate branch has no P adjustment. D=78+5=83 → clamped to 80.
+    // Damping ratio 80/82 = 0.98 ≤ DAMPING_RATIO_MAX_MICRO (1.0) → no correction.
     const profile = makeProfile({
       meanOvershoot: 20,
       meanRiseTimeMs: 30,
-      meanSettlingTimeMs: 200,
+      meanSettlingTimeMs: 150,
+    });
+    const pids: PIDConfiguration = {
+      roll: { P: 82, I: 60, D: 78 },
+      pitch: { P: 82, I: 60, D: 78 },
+      yaw: { P: 40, I: 60, D: 0 },
+    };
+    const recs = recommendPID(
+      profile,
+      emptyProfile(),
+      emptyProfile(),
+      pids,
+      undefined,
+      undefined,
+      'balanced',
+      undefined,
+      undefined,
+      undefined,
+      '1"'
+    );
+    const dRec = recs.find((r) => r.setting === 'pid_roll_d' && !r.informational);
+    expect(dRec).toBeDefined();
+    // D=78+5=83 → clamped to 80 (1" dMax)
+    expect(dRec!.recommendedValue).toBe(80);
+  });
+
+  it('should not clamp a moderate 1" D increase that fits the new dMax=80', () => {
+    // Old bounds (dMax=50) would have clamped 46+5=51 to 50; new bounds keep 51.
+    const profile = makeProfile({
+      meanOvershoot: 20,
+      meanRiseTimeMs: 30,
+      meanSettlingTimeMs: 150,
     });
     const pids: PIDConfiguration = {
       roll: { P: 60, I: 60, D: 46 },
@@ -1742,11 +1927,69 @@ describe('quad-size-aware PID bounds', () => {
       undefined,
       '1"'
     );
+    const dRec = recs.find((r) => r.setting === 'pid_roll_d' && !r.informational);
+    expect(dRec).toBeDefined();
+    expect(dRec!.recommendedValue).toBe(51); // 46+5, within 1" dMax=80
+  });
+
+  it('should allow D/P ratio up to 1.0 on micro quads (DAMPING_RATIO_MAX_MICRO)', () => {
+    // D/P = 57/60 = 0.95: overdamped by the standard 0.85 ceiling but healthy
+    // for whoops (whoop presets run 0.91-0.95). No recs expected on 1".
+    const goodProfile = makeProfile({
+      meanOvershoot: 5,
+      meanRiseTimeMs: 30,
+      meanSettlingTimeMs: 150,
+    });
+    const pids: PIDConfiguration = {
+      roll: { P: 60, I: 60, D: 57 },
+      pitch: { P: 60, I: 60, D: 57 },
+      yaw: { P: 40, I: 60, D: 0 },
+    };
+    const recs = recommendPID(
+      goodProfile,
+      goodProfile,
+      emptyProfile(),
+      pids,
+      undefined,
+      undefined,
+      'balanced',
+      undefined,
+      undefined,
+      undefined,
+      '1"'
+    );
+    const dRec = recs.find((r) => r.setting === 'pid_roll_d');
+    expect(dRec).toBeUndefined();
+  });
+
+  it('should still flag D/P ratio 0.95 as overdamped on 5" (standard 0.85 max)', () => {
+    const goodProfile = makeProfile({
+      meanOvershoot: 5,
+      meanRiseTimeMs: 30,
+      meanSettlingTimeMs: 150,
+    });
+    const pids: PIDConfiguration = {
+      roll: { P: 60, I: 60, D: 57 },
+      pitch: { P: 60, I: 60, D: 57 },
+      yaw: { P: 40, I: 60, D: 0 },
+    };
+    const recs = recommendPID(
+      goodProfile,
+      goodProfile,
+      emptyProfile(),
+      pids,
+      undefined,
+      undefined,
+      'balanced',
+      undefined,
+      undefined,
+      undefined,
+      '5"'
+    );
     const dRec = recs.find((r) => r.setting === 'pid_roll_d');
     expect(dRec).toBeDefined();
-    // D=46+5=51 → clamped to 50 (1" dMax)
-    expect(dRec!.recommendedValue).toBeLessThanOrEqual(50); // 1" dMax
-    expect(dRec!.recommendedValue).toBe(50);
+    expect(dRec!.recommendedValue).toBeLessThan(57); // reduced toward 0.85 ratio
+    expect(dRec!.ruleId).toBe('P-DR-OD-roll');
   });
 
   it('should allow higher D for 7" long range (dMax=100)', () => {
@@ -1903,8 +2146,8 @@ describe('P-too-high informational warning', () => {
 });
 
 describe('P-too-low informational warning', () => {
-  it('should warn when P is below typical for quad size (1" pTypical=65)', () => {
-    // P=25 on 1" quad (pTypical=65, threshold=65*0.7=45.5) → informational warning
+  it('should warn when P is below typical for quad size (1" pTypical=72)', () => {
+    // P=25 on 1" quad (pTypical=72, threshold=72*0.7=50.4) → informational warning
     const goodProfile = makeProfile({
       meanOvershoot: 5,
       meanRiseTimeMs: 30,
@@ -1943,9 +2186,10 @@ describe('P-too-low informational warning', () => {
       meanRiseTimeMs: 30,
       meanSettlingTimeMs: 150,
     });
+    // P=60 is within 0.7-1.3× of 1" pTypical=72 (50.4-93.6)
     const normalPPids: PIDConfiguration = {
-      roll: { P: 50, I: 60, D: 20 },
-      pitch: { P: 50, I: 60, D: 20 },
+      roll: { P: 60, I: 60, D: 20 },
+      pitch: { P: 60, I: 60, D: 20 },
       yaw: { P: 40, I: 60, D: 0 },
     };
     const recs = recommendPID(
@@ -2396,17 +2640,29 @@ describe('recommendItermRelaxCutoff', () => {
   });
 
   it('should recommend for aggressive style when cutoff is too low', () => {
-    // cutoff=10, typical=25, deviation = 15/25 = 0.6 > 0.5
+    // cutoff=10, typical=30 (BF wiki: 30-40 for racing), deviation = 20/30 = 0.67 > 0.5
     const rec = recommendItermRelaxCutoff(10, 'aggressive');
     expect(rec).toBeDefined();
-    expect(rec!.recommendedValue).toBe(25);
+    expect(rec!.recommendedValue).toBe(30);
     expect(rec!.reason).toContain('racing');
     expect(rec!.reason).toContain('snappiness');
   });
 
   it('should not recommend for aggressive style when cutoff is already in range', () => {
-    // cutoff=25, typical=25, deviation = 0
+    // cutoff=25, typical=30, deviation = 5/30 = 0.17 < 0.5
     expect(recommendItermRelaxCutoff(25, 'aggressive')).toBeUndefined();
+  });
+
+  it('should recommend typical 30 for aggressive style when cutoff is too high', () => {
+    // cutoff=60, typical=30, deviation = 30/30 = 1.0 > 0.5 → recommend the 20-40 band typical
+    const rec = recommendItermRelaxCutoff(60, 'aggressive');
+    expect(rec).toBeDefined();
+    expect(rec!.recommendedValue).toBe(30);
+  });
+
+  it('should accept cutoff 40 for aggressive style (top of 20-40 racing band)', () => {
+    // cutoff=40, typical=30, deviation = 10/30 = 0.33 < 0.5 → no rec
+    expect(recommendItermRelaxCutoff(40, 'aggressive')).toBeUndefined();
   });
 
   it('should include style-appropriate description in reason', () => {
@@ -2701,13 +2957,22 @@ describe('recommendPidsumLimits', () => {
     expect(limitRec!.currentValue).toBe(500);
     expect(limitRec!.recommendedValue).toBe(1000);
     expect(limitRec!.confidence).toBe('low');
-    expect(limitRec!.informational).toBeUndefined();
+    expect(limitRec!.informational).toBe(true); // advisory only — never auto-applied
     expect(limitRec!.ruleId).toBe('P-PIDLIM');
 
     const yawRec = recs.find((r) => r.setting === 'pidsum_limit_yaw');
     expect(yawRec).toBeDefined();
     expect(yawRec!.currentValue).toBe(400);
     expect(yawRec!.recommendedValue).toBe(1000);
+    expect(yawRec!.informational).toBe(true);
+  });
+
+  it('should mark both pidsum recs informational with thrust-headroom caveat in reason', () => {
+    const recs = recommendPidsumLimits(500, 400, 900);
+    expect(recs.every((r) => r.informational === true)).toBe(true);
+    expect(recs[0].reason).toContain('Apply manually');
+    expect(recs[0].reason).toContain('thrust headroom');
+    expect(recs[1].reason).toContain('thrust headroom');
   });
 
   it('should not recommend for light quads (<= 800g)', () => {
@@ -2800,19 +3065,23 @@ describe('extractAntiGravityGain', () => {
 
 describe('recommendAntiGravityGain', () => {
   it('should return undefined when gain is undefined', () => {
-    expect(recommendAntiGravityGain(undefined, 650, { roll: 5, pitch: 5 })).toBeUndefined();
+    expect(recommendAntiGravityGain(undefined, 750, { roll: 5, pitch: 5 })).toBeUndefined();
   });
   it('should return undefined when weight is undefined', () => {
     expect(recommendAntiGravityGain(80, undefined, { roll: 5, pitch: 5 })).toBeUndefined();
   });
-  it('should return undefined for lightweight builds (<=400g)', () => {
+  it('should return undefined for lightweight builds (<=700g)', () => {
     expect(recommendAntiGravityGain(80, 350, { roll: 5, pitch: 5 })).toBeUndefined();
   });
+  it('should not recommend for a typical 5" build (650g — presets keep gain 80)', () => {
+    // Threshold raised 400 → 700 g: 110/120 gains are for 7-9" heavy builds only
+    expect(recommendAntiGravityGain(80, 650, { roll: 4.0, pitch: 4.0 })).toBeUndefined();
+  });
   it('should return undefined when gain is already >= threshold', () => {
-    expect(recommendAntiGravityGain(100, 650, { roll: 5, pitch: 5 })).toBeUndefined();
+    expect(recommendAntiGravityGain(100, 750, { roll: 5, pitch: 5 })).toBeUndefined();
   });
   it('should recommend 120 for heavy build with high SSE on both axes', () => {
-    const rec = recommendAntiGravityGain(80, 650, { roll: 4.0, pitch: 4.0 });
+    const rec = recommendAntiGravityGain(80, 750, { roll: 4.0, pitch: 4.0 });
     expect(rec).toBeDefined();
     expect(rec!.setting).toBe('anti_gravity_gain');
     expect(rec!.recommendedValue).toBe(120);
@@ -2820,11 +3089,11 @@ describe('recommendAntiGravityGain', () => {
     expect(rec!.confidence).toBe('medium');
   });
   it('should recommend 110 for heavy build without high SSE on both axes', () => {
-    const rec = recommendAntiGravityGain(80, 650, { roll: 4.0, pitch: 1.0 });
+    const rec = recommendAntiGravityGain(80, 750, { roll: 4.0, pitch: 1.0 });
     expect(rec!.recommendedValue).toBe(110);
   });
-  it('should not recommend at weight boundary (exactly 400g)', () => {
-    expect(recommendAntiGravityGain(80, 400, { roll: 5, pitch: 5 })).toBeUndefined();
+  it('should not recommend at weight boundary (exactly 700g)', () => {
+    expect(recommendAntiGravityGain(80, 700, { roll: 5, pitch: 5 })).toBeUndefined();
   });
 });
 
@@ -2954,6 +3223,16 @@ describe('recommendTPA', () => {
     expect(bpRec).toBeDefined();
     expect(bpRec!.recommendedValue).toBe(1350);
     expect(bpRec!.reason).toContain('lower breakpoint');
+  });
+
+  it('should recommend breakpoint 1250 for small builds (whoop/tiny presets)', () => {
+    // TPA_BY_SIZE.small.breakpoint = 1250 (lowered from 1500 — whoop_justice,
+    // whoop_ayyykayyy, tiny_karate presets all use ~1250)
+    const ctx: TPAContext = { active: true, rate: 50, breakpoint: 1800, mode: 0 };
+    const recs = recommendTPA(ctx, '3"');
+    const bpRec = recs.find((r) => r.setting === 'tpa_breakpoint');
+    expect(bpRec).toBeDefined();
+    expect(bpRec!.recommendedValue).toBe(1250);
   });
 
   it('should not recommend TPA breakpoint when within range', () => {

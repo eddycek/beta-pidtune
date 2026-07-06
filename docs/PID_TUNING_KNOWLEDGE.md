@@ -109,6 +109,8 @@ Sources: SupaflyFPV 4.5 presets, UAV Tech radio options, Karate race presets.
 
 `rc_smoothing_auto_factor`: Most presets set 45 (BF default 30). Higher = smoother input
 but slightly more latency. Racing presets use 25-35, freestyle/cinema 45-50.
+FPVPIDlab's FF-RC-SMOOTH advisory (raise 30 → 45) is therefore **skipped for aggressive
+style** — pushing a racer from 30 to 45 would contradict the racing 25-35 range.
 
 ---
 
@@ -186,7 +188,7 @@ From BF Tuning Guide and community consensus:
 | **Very noisy** | 50 Hz | 100 Hz | BF Tuning Guide |
 | **Clean + RPM filter** | 200-400 Hz | 150-200 Hz | Community consensus |
 
-**Safety rule of thumb**: "Avoid getting the filter's cutoff below 100 Hz" (BF wiki) — below this, phase delay significantly degrades prop wash handling.
+**Safety rule of thumb**: The BF docs' "avoid below 100 Hz" guidance strictly refers to **notch filters** (dyn_notch_min_hz), not the gyro lowpass. For gyro/D-term lowpasses, the community floor is lower — Oscar Liang puts the D-term floor around ~80 Hz. FPVPIDlab still applies a conservative 100 Hz gyro LPF1 floor (see Section 6) as a **house rule**: below it, phase delay degrades prop wash handling.
 
 **D-term filter**: Oscar Liang notes "70-90 Hz may work, with 90 Hz offering best control and prop-wash handling at the cost of a little heat."
 
@@ -212,23 +214,23 @@ When dynamic lowpass is enabled (dyn_min > 0), the **2:1 ratio** (max = 2 × min
 
 #### Preset Multiplier Comparison
 
-| Preset | Quad | Gyro Mult | Gyro min/max | DTerm Mult | DTerm min/max | RPM? |
-|--------|------|-----------|-------------|-----------|--------------|------|
-| BF Default | generic | 100 | 250/500 | 100 | 75/150 | No |
-| SupaflyFPV | 3-4" | 140 | 350/700 | 140 | 105/210 | Optional |
-| SupaflyFPV | 5" | 120 | 300/600 | 140 | 105/210 | Optional |
-| SupaflyFPV | 7" | 80 | 200/400 | 140 | 105/210 | Optional |
-| UAV Tech | 5" | 60 | 150/300 | 120 | 90/180 | Optional |
+| Preset | Quad | Gyro Mult | Gyro LPF1 | DTerm Mult | DTerm min/max | RPM? |
+|--------|------|-----------|-----------|-----------|--------------|------|
+| BF Default | generic | 100 | 250/500 (dyn) | 100 | 75/150 | No |
+| SupaflyFPV 4.4 EasyTune | 3-4" | 160 (slider) | **disabled** (RPM handles it) | 140 | 105/210 | Yes |
+| SupaflyFPV 4.4 EasyTune | 5" | 160 (slider) | **disabled** (RPM handles it) | 140 | 105/210 | Yes |
+| SupaflyFPV 4.4 EasyTune | 6" | 120 (slider) | **disabled** (RPM handles it) | 140 | 105/210 | Yes |
+| SupaflyFPV 4.4 EasyTune | 7" | 80 (slider) | **disabled** (RPM handles it) | 140 | 105/210 | Yes |
+| UAV Tech | 5" | 60 | 150/300 (dyn) | 120 | 90/180 | Optional |
 | BF RPM Clean | 5" clean | 175 | 0(off)/875 | 105 | 78/157 | Yes |
 | BF RPM Normal | 5" typical | 100 | 0(off)/500 | 100 | 75/150 | Yes |
 | BF RPM Noisy | 5" worn | 50 | 0(off)/250 | 85 | 63/127 | Yes |
 
 **Key observations:**
-- With RPM filter active, many presets DISABLE gyro LPF1 entirely (static=0, dyn_min=0), relying on RPM+LPF2+notches
-- SupaflyFPV uses HIGHER multipliers for smaller quads (140 for 3-4" vs 80 for 7") — smaller quads have higher-frequency noise
+- With RPM filter active, current presets DISABLE gyro LPF1 entirely (static=0, dyn_min=0), relying on RPM+LPF2+notches. Current SupaflyFPV 4.4 EasyTune presets do this across all sizes (gyro slider multipliers 160/160/120/80 for 3-4"/5"/6"/7" only shape LPF2/notch behavior)
 - D-term multiplier tends to be higher than gyro multiplier (SupaflyFPV: dterm=140 across all sizes)
 - UAV Tech uses the most conservative gyro filtering (mult=60 → dyn_min=150 Hz)
-- **FPVPIDlab 7" D-term**: Uses multiplier 120 (between BF default 100 and SupaflyFPV 140). Rationale: 7" quads have higher inertia needing more D-term filtering than 5" default, but SupaflyFPV's 140 is aggressive for long-range where latency matters less
+- The simplified-tuning 2:1 ratio (dyn_max = 2 × dyn_min) is confirmed from BF Configurator source
 
 **FPVPIDlab rule**: When enabling dynamic lowpass, use `dyn_min = current static_hz`, `dyn_max = static_hz × 2` (matching BF 2:1 convention). Source: betaflight/firmware-presets.
 
@@ -260,10 +262,15 @@ RPM filter Q controls notch bandwidth — lower Q = wider notch = catches more n
 | Size | rpm_filter_q | rpm_filter_weights | Reasoning |
 |------|-------------|-------------------|-----------|
 | 1-2.5" | 700-1000 | 100,50,100 | Small motors — narrow harmonics |
-| 3-4" | 600-900 | 100,50,100 | Oversized motors (1404-1507) — broader harmonic spread than micros |
-| 5" | 700-1000 | 90,50,90 | Standard — narrow harmonics |
-| 6" | 600-800 | 90,50,90 | Larger props — wider harmonic spread |
-| 7"+ | 500-700 | 90,60,90 | Widest spread, needs broad Q |
+| 3-4" | 700-1000 | 100,50,100 | SupaflyFPV EasyTune sets Q=1000 for 3-4" (same as 5") |
+| 5" | 700-1000 | 90,50,90 | Standard — narrow harmonics (SupaflyFPV: 1000) |
+| 6" | 600-800 | 90,50,90 | Larger props — wider harmonic spread (SupaflyFPV: 800) |
+| 7"+ | 500-700 | 90,60,90 | Widest spread, needs broad Q (SupaflyFPV: 700) |
+
+**Preset philosophy differences**: SupaflyFPV scales Q by size (3-4"/5"=1000, 6"=800, 7"=700).
+UAV Tech leaves Q at the BF default 500 for all sizes. The official BF basic presets scale Q by
+build **cleanliness**, not size (clean 750 → noisy 350). FPVPIDlab follows the SupaflyFPV
+size-based scaling.
 
 `rpm_filter_weights` (BF 4.5+): Per-harmonic notch depth (1st, 2nd, 3rd). 100 = full depth.
 Second harmonic (2nd value) typically lower (30-50) — less energy in 2nd harmonic for most props.
@@ -278,11 +285,13 @@ Second harmonic (2nd value) typically lower (30-50) — less energy in 2nd harmo
 - Normal D delay is about 5ms, motor time constant ~15ms (BF Tuning Notes)
 - **Goal**: Minimize total filter delay while keeping noise under control
 - PT1 < PT2 < Biquad in terms of delay at same cutoff frequency
-- Notch filters add delay primarily near their center frequency, minimal elsewhere
+- **BF doc delay rules of thumb**: PT1 ≈ 1 ms at 100 Hz cutoff, biquad ≈ 2 ms; PT2 adds ~60% over PT1, PT3 ~2× PT1
+- Notch filters add delay primarily near their center frequency, minimal elsewhere. **Notch phase anchor** (BF filtering doc): 90° phase shift at the notch center, 45° at the −3 dB edges
+- **BF 4.3+ defaults ALL gyro and D-term lowpasses (LPF1 and LPF2) to PT1** — biquad remains a CLI option only. Delay models should assume PT1 unless the filter type is explicitly set to biquad
 
 ### BF Version Filter Changes
 
-- **BF 4.3**: Removed biquad option from gyro LPF (PT1/PT2/PT3 only), introduced slider system for filter tuning
+- **BF 4.3**: Removed biquad option from gyro LPF (PT1/PT2/PT3 only) and defaulted all remaining lowpasses (gyro + D-term, LPF1 + LPF2) to PT1; introduced slider system for filter tuning
 - **BF 4.5**: Dimmable RPM harmonics (per-harmonic notch depth), low-throttle TPA
 - **BF 4.6 (2025.12)**: DEBUG_GYRO_SCALED removed, chirp signal generator for transfer function analysis
 
@@ -413,13 +422,14 @@ Propwash oscillation occurs during throttle transitions (descent → climb) when
 - `d_min` = minimum D value. `D` in PID config = maximum (d_max)
 - `d_min_gain` controls how fast D ramps up (20 = default/racing, 30-35 = freestyle)
 - During propwash, D typically climbs about halfway to d_max
-- BF firmware defaults: d_min_roll=23, d_min_pitch=25, d_min_yaw=0, gain=20, advance=20
+- BF firmware defaults (4.4/4.5, `pid.h`): d_min_roll=30, d_min_pitch=34 with D(=d_max)=40/46; d_min_yaw=0, gain=20, advance=20
+- **BF 2025.12 (4.6) rename**: `d_min` became the base `d` (defaults 30/34), the old `D` became `d_max` (defaults 40/46), and the `d_min` setting was removed. The rename shipped in 2025.12, NOT in 4.5
 - Freestyle recommendation: d_min close to D, d_max 20-40% higher, gain=30-35
 
 **iterm_relax (BF 3.4+)**
 - Suppresses I accumulation during fast maneuvers, preventing bounce-back
 - Lower cutoff = more suppression = less bounce-back
-- Racing: cutoff 20-30, Freestyle: 10-15, Heavy/7" quads: 5-7
+- Racing: cutoff 30-40 (BF wiki, "I Term Relax Explained": "30-40 is good for racing"; race whoop presets span 20-45), Freestyle: 10-15, Heavy/7" quads: 5-7
 - BF default: mode=RP, type=SETPOINT, cutoff=15
 - If bounce-back after flips: reduce cutoff from 15 → 10 → 7 → 5
 
@@ -442,6 +452,7 @@ Propwash oscillation occurs during throttle transitions (descent → climb) when
 - PW-DMIN-GAP: widen d_min/d_max gap when < 20% of d_max
 - PW-DMIN-ENABLE: enable d_min when propwash severe + currently disabled
 - PW-IRELAX-CUTOFF: lower cutoff by 5 per iteration (floor=7) when propwash severe (≥5×). Follows community guidance "reduce 15→10→7→5" — allows progressive reduction from BF default 15 down to floor 7 across multiple tuning sessions
+- PW-IRELAX-CUTOFF-MOD: lower cutoff by 5 with floor=15 when propwash moderate (2-5×) — milder suppression, low confidence
 - PW-IRELAX-ENABLE: enable iterm_relax when disabled + propwash detected
 - PW-TPA-MODE: prefer D-only when propwash severe
 - PW-TPA-BREAKPOINT: raise breakpoint to 1350 when < 1300
@@ -458,7 +469,7 @@ Computes the closed-loop transfer function H(f) from setpoint → gyro using fre
 H(f) = S_xy(f) / (S_xx(f) + ε)
 ```
 Where:
-- S_xy = cross-spectral density (setpoint × conjugate of gyro)
+- S_xy = cross-spectral density = **gyro × conjugate of setpoint** (Y·conj(X) — output times conjugated input, the correct orientation for H = output/input)
 - S_xx = input auto-spectral density (setpoint power)
 - ε = regularization term (prevents division by zero at low-energy frequencies)
 
@@ -488,7 +499,7 @@ Works from **any flight data** — no dedicated maneuvers needed. Pioneered by P
 - General control theory: >45° = good stability, 30-45° = marginal, <30° = near instability
 
 **DC Gain:**
-- Magnitude at lowest frequency (≈0 Hz)
+- Low-frequency magnitude of H(f). FPVPIDlab computes it as the **average over the 1-5 Hz band**, not bin 0 — without detrending, the raw DC bin is dominated by signal offsets and is unreliable. The -3 dB bandwidth reference uses the same band average
 - 0 dB = perfect 1:1 steady-state tracking
 - Negative DC gain indicates I-term may be too low
 
@@ -526,6 +537,10 @@ FPVPIDlab uses its own dB scale based on raw FFT power spectral density, normali
 
 FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (noisiest)**. These are internal scale endpoints, not community-standard values.
 
+**Size-aware noise classification (`NOISE_LEVEL_BY_SIZE`)**: The only community-anchored row is 5" — the PIDtoolbox convention of −30 dB for a "clean" 5" build (and roughly −10 dB for D-term). All non-5" rows (1": −15/−30, 2.5": −20/−35, 3": −25/−40, 4": −27/−40, 6": −33/−50, 7": −35/−55 high/medium dB) are a **house extrapolation** of that standard — smaller/higher-KV builds get more lenient thresholds, larger/lower-KV builds stricter ones. No published community per-size table exists.
+
+**Mechanical health extreme-noise threshold**: `MechanicalHealthChecker` flags "extreme noise / possible damaged prop" at `max(−20 dB, NOISE_LEVEL_BY_SIZE[size].highDb + 5 dB)` — size-aware so that a healthy 1"/2.5" build (inherently noisy) is not falsely flagged.
+
 ### Peak Detection (FPVPIDlab-Specific)
 
 - **Prominence threshold**: 6 dB above local noise floor (within ±50 frequency bins) — classifies a peak as "detected"
@@ -559,11 +574,11 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (
   *Rationale*: Gyro LPF1 min of 75 Hz is between BF's "very noisy" (50) and "slightly noisy" (80) — a compromise that prevents excessive phase delay while still allowing aggressive filtering for noisy quads. With RPM filter, bounds widen because RPM handles motor harmonics.
 
 - **Deadzone**: 5 Hz minimum change to trigger recommendation (prevents trivial adjustments)
-- **Propwash safety floor**: If target gyro LPF1 < 100 Hz AND worst noise floor ≤ -15 dB, raise to 100 Hz. Matches BF community guidance: "avoid filter cutoffs below 100 Hz." Bypassed only when noise is extreme (> -15 dB) because filtering takes priority over propwash.
+- **Propwash safety floor**: If target gyro LPF1 < 100 Hz AND worst noise floor ≤ -15 dB, raise to 100 Hz. This is a **conservative FPVPIDlab house rule** — the BF docs' "avoid below 100 Hz" advice refers to notch filters, and the community D-term lowpass floor is ~80 Hz (Oscar Liang). Bypassed only when noise is extreme (> -15 dB) because filtering takes priority over propwash.
 
 **Rule 2: Resonance Peak Mitigation** (notch-aware)
 - Collect peaks ≥12 dB above noise floor on roll and pitch
-- **Notch-aware filtering**: Peaks within dyn_notch_min–dyn_notch_max range are excluded — the dynamic notch already handles them. Only peaks outside this range trigger LPF recommendations.
+- **Notch-aware filtering**: Peaks within dyn_notch_min–dyn_notch_max range are excluded **only when `dyn_notch_count > 0`** — with the notch disabled, in-range peaks still trigger LPF recommendations. Only peaks not covered by an active notch trigger LPF recommendations.
 - If significant peak outside notch range AND below current cutoff or cutoff disabled:
   - Target cutoff = lowest_peak_freq - 20 Hz, clamped to safety bounds
   - Recommend lowering both gyro LPF1 and D-term LPF1
@@ -574,18 +589,23 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (
 - Peaks above max: recommend `new_max = highest_peak + 20`, clamped ≤1000 Hz
 
 **Rule 4: RPM-Aware Dynamic Notch Simplification** (when RPM filter active)
-- If dyn_notch_count > 1: recommend reducing to 1 (frame resonance tracking only)
+- **Size-aware count target**: sub-5" quads → 2 notches (more complex vibration coupling), 5"+ → 1 notch. If dyn_notch_count > target: step down toward the target, at most **2 per iteration** (`DYN_NOTCH_COUNT_MAX_STEP`) — dropping 5→1 at once can regress axes where removed notches tracked real peaks
 - **Conditional Q recommendation**:
-  - If strong frame resonance detected (≥12 dB peaks in 80-200 Hz): keep Q=300 (wider notch needed to catch broad resonance)
+  - If strong frame resonance detected (≥12 dB peaks in 80-200 Hz): keep Q=300 (wider notch needed to catch broad resonance) — medium confidence
   - Otherwise: recommend Q=500 (narrower notch, less signal distortion)
-- *Rationale*: With RPM handling motor harmonics, dynamic notch only needs to catch frame resonance — 1 narrow notch suffices. But strong frame resonance needs wider Q to be effective. Community consensus supports this (UAV Tech, BF 4.3+ notes).
+- *Rationale*: With RPM handling motor harmonics, the dynamic notch only needs to catch frame resonance — 1 narrow notch suffices on 5"+; small builds keep 2. Community consensus supports simplification (UAV Tech, BF 4.3+ notes); the per-size split and max step are FPVPIDlab house choices.
 
-**Rule 6: LPF2 Recommendations** (new)
-- **Disable gyro LPF2**: When RPM filter active AND noise floor < -45 dB (very clean). Reduces filter delay.
-- **Disable D-term LPF2**: When RPM filter active AND noise floor < -45 dB (very clean). Reduces D-term latency. RPM filter required as safety net before removing LPF2.
-- **Enable gyro LPF2**: When no RPM filter AND noise floor ≥ -30 dB (noisy). Extra filtering protects motors.
-- **Enable D-term LPF2**: When noise floor ≥ -30 dB AND LPF2 currently disabled. Extra D-term protection.
+**Rule 6: LPF2 Recommendations**
+- **Disable gyro LPF2** (F-LPF2-DIS-GYRO): When RPM filter active AND noise floor < -45 dB (`GYRO_LPF2_DISABLE_THRESHOLD_DB`). Reduces filter delay.
+- **Disable D-term LPF2** (F-LPF2-DIS-DTERM): When RPM filter active AND noise floor < -45 dB (`DTERM_LPF2_DISABLE_THRESHOLD_DB`). Reduces D-term latency. RPM filter required as safety net before removing LPF2.
+- **Enable gyro LPF2** (F-LPF2-EN-GYRO): When no RPM filter AND noise floor ≥ -30 dB (noisy). Enables at **250 Hz** (house choice — conservative secondary cutoff below the BF default 500 Hz). Extra filtering protects motors.
+- **Enable D-term LPF2** (F-LPF2-EN-DTERM): When noise floor ≥ -30 dB AND LPF2 currently disabled. Enables at **150 Hz**. Extra D-term protection.
 - *Rationale*: LPF2 adds significant phase delay — only worth it when noise level justifies it. With RPM filter + clean noise, LPF2 is counterproductive.
+
+**Dynamic Lowpass Rules (F-DLPF-*)** — `DynamicLowpassRecommender`:
+- **Enable** (F-DLPF-GYRO / F-DLPF-DTERM): throttle-dependent noise detected — noise increase from low to high throttle ≥ **6 dB**, Pearson throttle-noise correlation ≥ **0.6**, and at least **3 throttle bands** with data. Recommends `dyn_min = current static cutoff`, `dyn_max = static × 2` (BF 2:1 convention). Only fires when dynamic mode is not already active — when it is, the FilterRecommender tunes dyn_min/max directly.
+- **Disable** (F-DLPF-GYRO-OFF / F-DLPF-DTERM-OFF): dynamic is active but throttle-dependent noise is absent AND the delta is below **4 dB** (`DYNAMIC_LOWPASS_DISABLE_DB`). The 4–6 dB gray zone is a **hysteresis band** — no change either way, preventing enable/disable flip-flop across sessions. Low confidence.
+- These thresholds (6 dB / 0.6 / 4 dB) are FPVPIDlab house values — no direct community equivalent.
 
 **Rule 5: Motor Harmonic Diagnostic** (when RPM filter active)
 - If motor harmonics still detected at ≥12 dB: emit warning about possible `motor_poles` misconfiguration or ESC telemetry issues
@@ -624,13 +644,14 @@ Per-axis rules anchored to **flight PIDs from BBL header** (convergent design �
 - High error (> steadyStateErrorMax): I increase by +10 (if error > 2× threshold) or +5
 - Low error + slow settling + overshoot: I decrease by 5 (may be causing oscillation)
 
-**Yaw relaxation**: All overshoot/ringing thresholds × 1.5 for yaw axis (yaw is mechanically less responsive).
+**Yaw relaxation**: All overshoot, ringing, and sluggish-rise thresholds × 1.5 for yaw axis (yaw is mechanically less responsive).
 
 ### PID Post-Processing Rules
 
 **Damping Ratio Validation** (roll/pitch only):
-- FPVPIDlab enforces D/P ratio within **0.45-0.85**
+- FPVPIDlab enforces D/P ratio within **0.45-0.85** (upper bound **1.0 for 1"/2.5" micros** via `DAMPING_RATIO_MAX_MICRO`)
 - *Comparison to community*: BF defaults are ~0.55-0.65, FPVSIM recommends 0.6 start. FPVPIDlab's 0.45 lower bound is intentionally liberal — it's a safety floor, not a target. It allows slightly under-damped tunes for pilots who prefer snappy response. The 0.85 upper bound prevents excessive D-noise.
+- *Micro exception rationale*: whoop presets legitimately run heavy damping — whoop_justice D/P ≈ 0.91-0.94, whoop_ayyykayyy ≈ 0.95. A 0.85 ceiling would fight stock micro tunes, so 1"/2.5" use a 1.0 ceiling.
 - 3 correction rules:
   1. Under-damped (D/P < 0.45, no existing D rec): recommend D increase to P × 0.45
   2. Over-damped after D increase (D/P > 0.85, D rec exists, no P rec): recommend P increase to D / 0.85
@@ -640,8 +661,8 @@ Per-axis rules anchored to **flight PIDs from BBL header** (convergent design �
 **D-Term Effectiveness Gating** (FPVPIDlab-specific, 3 tiers):
 1. D effectiveness > 0.7: boost D-increase confidence to 'high' — D is clearly helping
 2. D effectiveness 0.3-0.7: allow D increase, annotate noise cost warning
-3. D effectiveness < 0.3: redirect to "improve filters first", confidence → 'low'
-- *Rationale*: Community says "D amplifies noise by 10-100x." If D isn't actually reducing overshoot (low effectiveness), raising it just adds noise. This gating prevents blind D increases.
+3. D effectiveness < 0.3: **block the D increase** and replace it with an informational "improve filters first" recommendation (`P-DTE-BLOCK`, low confidence, no value change) — the pilot is told to run a Filter Tune first instead of the D change silently disappearing
+- *Rationale*: Community says "D amplifies noise by 10-100x." If D isn't actually reducing overshoot (low effectiveness), raising it just adds noise. This gating prevents blind D increases while keeping the pilot informed.
 
 **Prop Wash Integration:**
 - Minimum 3 events for reliable analysis
@@ -686,9 +707,10 @@ Per-axis rules anchored to **flight PIDs from BBL header** (convergent design �
 - Only if overshoot is low (system just sluggish, not oscillating)
 - P increase by 5
 
-**Rule TF-4: DC Gain Deficit** (< -1.0 dB)
+**Rule TF-4: DC Gain Deficit** (style-aware threshold)
+- Threshold = `20·log10(1 − steadyStateErrorMax/100)` dB — the dB equivalent of each style's steady-state error limit (smooth 8% ≈ −0.72 dB, balanced 5% ≈ −0.45 dB, aggressive 3% ≈ −0.26 dB)
 - System doesn't fully track setpoint at steady state
-- If |dcGain| > 3 dB: I increase +10, else +5
+- If deficit > 2× the style threshold: I increase +10 (medium confidence), else +5 (low confidence)
 - Flash Tune equivalent of steady-state error detection (no direct step measurement available)
 
 ### PID Safety Bounds (Quad-Size-Aware)
@@ -697,8 +719,8 @@ Default bounds (used when drone size is unknown) match standard 5" values. When 
 
 | Size | P min | P max | D min | D max | I min | I max | P typical |
 |------|-------|-------|-------|-------|-------|-------|-----------|
-| 1" | 30 | 80 | 15 | 50 | 40 | 100 | 40 |
-| 2" *(ref only)* | 30 | 80 | 15 | 50 | 40 | 100 | 40 |
+| 1" | 30 | 90 | 15 | 80 | 40 | 100 | 72 |
+| 2" *(ref only)* | 30 | 90 | 15 | 80 | 40 | 100 | 72 |
 | 2.5" | 25 | 90 | 15 | 55 | 40 | 110 | 42 |
 | 3" | 20 | 100 | 15 | 60 | 40 | 110 | 45 |
 | 4" | 20 | 110 | 15 | 70 | 40 | 120 | 46 |
@@ -712,9 +734,9 @@ Default bounds (used when drone size is unknown) match standard 5" values. When 
 | Parameter | Rationale |
 |-----------|-----------|
 | P min = 20-30 | Micro quads (1-2"): pMin=30 because P<30 is dangerously unresponsive at their low inertia. Standard+ quads: pMin=20. |
-| P max 80-120 | Micro quads saturate motors at lower P. Standard/large quads tolerate higher P. |
+| P max 90-120 | Whoop presets cluster P 63-83 roll/pitch (whoop_justice, whoop_ayyykayyy, UAV Tech Whoop, Air65 BNF) — 1" pMax=90 covers them with headroom. P>90 appears only on whoop **yaw** (up to 108). Standard/large quads tolerate higher P. |
 | D min = 15 | Below 15 provides negligible damping |
-| D max 50-100 | Small quads: high noise, low inertia → D > 50 dangerous. Large quads: high inertia needs more D damping. |
+| D max 55-100 | Whoop presets run D 57-79 on roll/pitch (D/P ≈ 0.9-0.95) — 1" dMax=80 accommodates them. 2.5": dMax=55. Large quads: high inertia needs more D damping (6"=90, 7"=100). |
 | I min = 40 | I=30 causes poor wind rejection and attitude drift. BF defaults I=60-90. |
 | I max 100-120 | Micro quads rarely need I > 100. Standard quads: community rarely above 110. |
 | P typical | Size-specific P reference for informational warnings: "P too high" (triggers at 1.3×) and "P too low" (triggers at 0.7×) |
@@ -766,6 +788,8 @@ FPVPIDlab adjusts all PID thresholds based on the pilot's declared flight style.
 
 - Reference frequency: 80 Hz (typical control bandwidth)
 - Per-filter delay computation using analytical formulas (PT1, biquad, notch)
+- **All lowpasses (LPF1 + LPF2) modeled as PT1** — the BF 4.3+ default. Modeling LPF2 as biquad would overestimate its delay ~2× (BF doc: PT1 ≈ 1 ms @ 100 Hz, biquad ≈ 2 ms)
+- **Notch group delay** uses the denominator-only derivation: for H(s) = (s² + w0²)/(s² + (w0/Q)s + w0²), the numerator is purely real on the jω axis, so `τ(ω) = bw·(w0²+ω²) / ((w0²−ω²)² + bw²ω²)` with bw = w0/Q. Sanity anchor: BF doc's 90°-at-center / 45°-at-edges phase rule → ≈1 ms for a wide notch near 250 Hz
 - Dynamic notch Q handling: BF stores Q×100 internally → `actualQ = Q > 10 ? Q / 100 : Q`
 - **Warning threshold: 2.0 ms** gyro chain total at 80 Hz
 - *Rationale for 2ms*: BF notes "normal D delay is about 5ms, motor time constant ~15ms." Gyro filter delay beyond 2ms starts to meaningfully degrade PID response.
@@ -810,6 +834,8 @@ Scored before generating filter recommendations:
 | Axis coverage | 0.20 | 0 active axes | 3 active axes (coherence >0.3) |
 
 **Warnings**: `short_hover_time` (<5s), `low_logging_rate` (<2kHz), `low_step_magnitude` (RMS <10 deg/s), `low_coherence` (per-axis coherence ≤0.3 — severity: <0.15 warning, 0.15-0.3 info)
+
+> **Implementation note**: coherence is an optional input — the Wiener estimator does not currently compute S_yy, so `coherenceMean` is absent and the axis-coverage sub-score falls back to a neutral 50. Coherence-based scoring activates only if/when the estimator provides it.
 
 ### Quality Tiers & Confidence Adjustment
 
@@ -898,7 +924,8 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 
 ### Tiny Whoop (25g, 19000KV, 1S)
 
-- **PID range**: P 70-120, I 80-110, D 50-80
+- **PID range**: P 60-90 roll/pitch (yaw up to ~110), I 80-110, D 50-80
+- **Real preset cluster** (whoop_justice, whoop_ayyykayyy, UAV Tech Whoop, Air65 BNF): P 63-83 / D 57-79 on roll+pitch; P>90 only on yaw (up to 108). D/P ratio runs 0.9-0.95 — hence FPVPIDlab's 1.0 micro damping ceiling
 - **Filters**: Gyro LPF1 200-350 Hz, D-term LPF1 130-180 Hz
 - **Goal**: Aggressive for the size, high P needed for low-authority motors
 - **Notes**: Very high KV motors have less authority → needs higher PID gains. Lightweight means quick response but also quick upset from air disturbance.
@@ -937,6 +964,7 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 | SupaflyFPV 5" | PD | 50 | 1250 |
 | SupaflyFPV 6-7" | D | 80 | 1250 |
 | Karate Race | D | 70 | 1250 |
+| Whoop/tiny presets (whoop_justice, whoop_ayyykayyy, tiny_karate) | D | 50-70 (near default) | ~1250 |
 | BF Default | D | 65 | 1350 |
 
 **Low-throttle TPA (BF 4.5+):**
@@ -945,25 +973,30 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 - `tpa_low_always`: ON in SupaflyFPV presets — always attenuate at low throttle
 - **Pattern**: Most presets lower breakpoint to 1250 (from 1350). Larger quads use higher tpa_rate.
 
+**FPVPIDlab `TPA_BY_SIZE`**: small (1-4"): rate 50, breakpoint **1250** (matches whoop/tiny presets); standard (5"): rate 65, breakpoint 1350; large (6-7"): rate 80, breakpoint 1250.
+
 ### Anti-Gravity
 
 - Boosts I-term temporarily during rapid throttle changes (punch-outs, drops)
 - `anti_gravity_gain`: Strength of I boost (BF 4.5: 0-250, **default 80**)
 - Note: BF 4.3 used internal units (default 5000). BF 4.5+ changed to 0-250 scale.
 
-**Community preset values:**
+**Community preset values (verified against betaflight/firmware-presets):**
 
 | Scenario | anti_gravity_gain |
 |----------|------------------|
 | BF 4.5 default | 80 |
-| SupaflyFPV 5" (with cam) | 120 |
-| SupaflyFPV 5" (no cam) | 110 |
-| UAV Tech 5" FS+GoPro | 120 |
+| SupaflyFPV 5" | 80 (default) |
+| SupaflyFPV 7" | 120 |
+| UAV Tech 8-9" cinelifter | 110 |
 | UAV Tech Whoop | 90 |
 | Race (Karate, ctzsnooze) | 80 (default) |
 
-**Pattern**: Freestyle with camera weight benefits from higher anti-gravity (110-120).
-Race builds use default. Lightweight builds use default or slightly above.
+**Pattern**: Elevated anti-gravity (110-120) appears only on genuinely heavy 7-9" craft.
+5" presets — including freestyle-with-GoPro — keep the default 80. Whoops go slightly
+above default (90). **FPVPIDlab gate**: anti-gravity increase (110/120) is only recommended
+above **700 g** drone weight (`ANTI_GRAVITY_WEIGHT_THRESHOLD_G`) — this excludes typical
+5" freestyle builds (~650 g), matching the preset evidence.
 
 ### I-term Relax
 
@@ -971,7 +1004,7 @@ Race builds use default. Lightweight builds use default or slightly above.
 - `iterm_relax`: Mode selection (OFF, RP for roll/pitch, RPY for all axes)
 - `iterm_relax_type`: GYRO (reacts to actual movement) or SETPOINT (reacts to stick input)
 - `iterm_relax_cutoff`: Frequency threshold (1-100, default 15)
-  - **Racing**: 20-30 (less relaxation, tighter tracking during fast direction changes)
+  - **Racing**: 30-40 (BF wiki, "I Term Relax Explained": "30-40 is good for racing, 15 for freestyle, 10 or even lower for big heavier quads"; race whoop presets span 20-45 — FPVPIDlab's aggressive band is 20-40, typical 30)
   - **Freestyle**: 10-15 (more relaxation, smoother flip/roll recovery)
   - **Cinematic**: 5-10 (maximum relaxation, smoothest transitions)
 - Lower cutoff = more relaxation = less bounce-back but potentially worse tracking
@@ -1036,11 +1069,12 @@ Decreases with size — larger props have more linear thrust curves.
 
 ### PID Sum Limits
 
-- `pidsum_limit`: Maximum combined PID output per axis (default 500)
-- `pidsum_limit_yaw`: Same for yaw (default 400)
-- UAV Tech universally sets both to 1000 for more headroom during aggressive maneuvers
+- `pidsum_limit`: Maximum combined PID output per axis (BF default 500 — confirmed in firmware)
+- `pidsum_limit_yaw`: Same for yaw (BF default 400 — confirmed in firmware)
+- UAV Tech universally sets both to 1000 — **on every size from whoop through 10"**, so the value itself is not weight-dependent in community practice
 - Karate Race: yaw limit 1000 (default pidsum_limit)
-- Higher limits allow full PID authority on heavy/powerful quads. Risk: motor desync on damaged quads.
+- Higher limits allow full PID authority on heavy/powerful quads. Risk: motor desync/saturation on damaged or underpowered quads.
+- **FPVPIDlab rule (P-PIDLIM)**: recommends 1000/1000 only above **800 g** drone weight (`PIDSUM_LIMIT_WEIGHT_THRESHOLD_G`). The weight gate is a **house rule with no community source** (community presets apply 1000 universally) — kept as a conservative safety filter. The recommendation is **informational-only** (`informational: true`): never auto-applied, the pilot applies it manually if the build has thrust headroom.
 
 ### D-term LPF Dynamic Expo (BF 4.5+)
 
@@ -1049,6 +1083,7 @@ Decreases with size — larger props have more linear thrust curves.
 - Karate Race: 7-10 (aggressive, less D filtering at high throttle)
 - Default: 5
 - Useful for race builds where minimal D-term latency at high throttle is critical
+- **FPVPIDlab per-style ranges** (`DTERM_DYN_EXPO_BY_STYLE`): aggressive 7-10 (Karate presets), balanced 5 (BF default). The smooth 3-5 range is a **house choice** — no cinematic preset source exists
 
 ---
 
@@ -1159,6 +1194,7 @@ Source: UAV Tech systematic methodology, BF Tuning Guide, Oscar Liang
 
 - `blackbox_sample_rate`: BF setting (1/1 = full rate, 1/2 = half, etc.)
 - Logging rate = `8000 / pid_process_denom / 2^blackbox_sample_rate`
+- From BBL headers, the effective log rate is `1e6 / (looptime × P interval × pid_process_denom)` — FPVPIDlab's low-logging-rate warning uses this, not the raw gyro rate
 - Higher rate = more data = better FFT resolution but fills flash faster
 - `debug_mode = GYRO_SCALED` required for noise analysis (shows unfiltered + filtered gyro)
 
@@ -1185,6 +1221,7 @@ Source: UAV Tech systematic methodology, BF Tuning Guide, Oscar Liang
 
 - DEBUG_GYRO_SCALED debug mode removed — gyro data available through other means
 - Chirp signal generator for transfer function analysis (FC-generated test signal)
+- **D-term rename**: `d_min` became the base `d` (defaults 30/34 roll/pitch), the former `D` became `d_max` (defaults 40/46), and the `d_min` setting was removed. This rename shipped in 2025.12 — NOT in 4.5
 
 ---
 

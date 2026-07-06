@@ -242,4 +242,127 @@ describe('verifyAppliedConfig', () => {
       expect(result.actual.gyro_lpf1_static_hz).toBe(200);
     });
   });
+
+  describe('Feedforward verification', () => {
+    function makeFFConfig(overrides?: Partial<Record<string, number>>) {
+      return {
+        transition: 0,
+        rollGain: 100,
+        pitchGain: 105,
+        yawGain: 100,
+        boost: 15,
+        smoothFactor: 25,
+        jitterFactor: 7,
+        maxRateLimit: 90,
+        dMinGain: 37,
+        itermRelax: 1,
+        itermRelaxCutoff: 15,
+        ...overrides,
+      };
+    }
+
+    function createFFMockMSPClient(ffOverrides?: Partial<Record<string, number>>) {
+      return {
+        ...createMockMSPClient(makePIDConfig(), makeFilterConfig()),
+        getFeedforwardConfiguration: vi.fn().mockResolvedValue(makeFFConfig(ffOverrides)),
+      };
+    }
+
+    it('verifies matching MSP-readable FF changes (read-back matches)', async () => {
+      const msp = createFFMockMSPClient({ boost: 10, smoothFactor: 40 });
+      const applied: AppliedChange[] = [
+        { setting: 'feedforward_boost', previousValue: 15, newValue: 10 },
+        { setting: 'feedforward_smooth_factor', previousValue: 25, newValue: 40 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(msp.getFeedforwardConfiguration).toHaveBeenCalled();
+      expect(result.verified).toBe(true);
+      expect(result.mismatches).toHaveLength(0);
+      expect(result.expected.feedforward_boost).toBe(10);
+      expect(result.actual.feedforward_boost).toBe(10);
+    });
+
+    it('reports mismatch when FF read-back differs from applied value', async () => {
+      const msp = createFFMockMSPClient({ boost: 15 }); // Apply said 10, FC says 15
+      const applied: AppliedChange[] = [
+        { setting: 'feedforward_boost', previousValue: 15, newValue: 10 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(false);
+      expect(result.mismatches.some((m) => m.includes('feedforward_boost'))).toBe(true);
+      expect(result.expected.feedforward_boost).toBe(10);
+      expect(result.actual.feedforward_boost).toBe(15);
+    });
+
+    it('verifies d_min_gain and iterm_relax_cutoff via FF read-back', async () => {
+      const msp = createFFMockMSPClient({ dMinGain: 40, itermRelaxCutoff: 12 });
+      const applied: AppliedChange[] = [
+        { setting: 'd_min_gain', previousValue: 37, newValue: 40 },
+        { setting: 'iterm_relax_cutoff', previousValue: 15, newValue: 12 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(true);
+      expect(result.actual.d_min_gain).toBe(40);
+      expect(result.actual.iterm_relax_cutoff).toBe(12);
+    });
+
+    it('skips CLI-only FF settings without failing verification', async () => {
+      const msp = createFFMockMSPClient();
+      const applied: AppliedChange[] = [
+        { setting: 'tpa_rate', previousValue: 65, newValue: 55 },
+        { setting: 'anti_gravity_gain', previousValue: 80, newValue: 110 },
+        { setting: 'feedforward_averaging', previousValue: 0, newValue: 2 },
+        { setting: 'simplified_dmax_gain', previousValue: 37, newValue: 0 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(true);
+      expect(result.mismatches).toHaveLength(0);
+      expect(result.unchecked).not.toContain('tpa_rate');
+      expect(result.unchecked).not.toContain('anti_gravity_gain');
+    });
+
+    it('marks unknown FF settings as unchecked (verified=false)', async () => {
+      const msp = createFFMockMSPClient();
+      const applied: AppliedChange[] = [
+        { setting: 'some_future_ff_setting', previousValue: 1, newValue: 2 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(false);
+      expect(result.unchecked).toContain('some_future_ff_setting');
+      expect(result.mismatches).toHaveLength(0);
+    });
+
+    it('does not crash when getFeedforwardConfiguration is not implemented', async () => {
+      // Legacy/mock MSP clients may not expose the optional FF read-back
+      const msp = createMockMSPClient(makePIDConfig(), makeFilterConfig());
+      const applied: AppliedChange[] = [
+        { setting: 'feedforward_boost', previousValue: 15, newValue: 10 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      // FF block is skipped entirely — no crash, no FF mismatches recorded
+      expect(result.verified).toBe(true);
+      expect(result.mismatches).toHaveLength(0);
+    });
+
+    it('does not call getFeedforwardConfiguration when no FF changes were applied', async () => {
+      const msp = createFFMockMSPClient();
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, []);
+
+      expect(msp.getFeedforwardConfiguration).not.toHaveBeenCalled();
+      expect(result.verified).toBe(true);
+    });
+  });
 });

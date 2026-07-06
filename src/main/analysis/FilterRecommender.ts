@@ -31,6 +31,7 @@ import {
   PROPWASH_GYRO_LPF1_FLOOR_HZ,
   PROPWASH_FLOOR_BYPASS_DB,
   GYRO_LPF2_DISABLE_THRESHOLD_DB,
+  DTERM_LPF2_DISABLE_THRESHOLD_DB,
   RPM_FILTER_Q_BY_SIZE,
   RPM_FILTER_Q_DEVIATION_THRESHOLD,
   DTERM_DYN_EXPO_BY_STYLE,
@@ -408,6 +409,11 @@ function recommendNoiseFloorAdjustments(
  * (less phase delay).
  */
 function isPeakInDynNotchRange(freq: number, current: CurrentFilterSettings): boolean {
+  // A disabled notch (count = 0) covers nothing — without this check a strong
+  // frame resonance inside the nominal min/max range would be silently assumed
+  // handled and left with no mitigation at all. An unknown count (undefined)
+  // is treated as enabled, since BF defaults to 3 notches.
+  if (current.dyn_notch_count !== undefined && current.dyn_notch_count <= 0) return false;
   return freq >= current.dyn_notch_min_hz && freq <= current.dyn_notch_max_hz;
 }
 
@@ -819,6 +825,8 @@ function recommendLpf2Adjustments(
         ruleId: 'F-LPF2-DIS-GYRO',
       });
     }
+  }
+  if (rpmActive && worstFloor < DTERM_LPF2_DISABLE_THRESHOLD_DB) {
     if (current.dterm_lpf2_static_hz > 0) {
       out.push({
         setting: 'dterm_lpf2_static_hz',

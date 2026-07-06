@@ -31,6 +31,13 @@ const IMPULSE_SMOOTH_WINDOW = 8;
 /** Bandwidth threshold: -3 dB below DC gain */
 const BANDWIDTH_THRESHOLD_DB = -3;
 
+/** Low-frequency band used as the DC-gain reference (Hz).
+ * Bin 0 itself is numerically unreliable: rate setpoints are ~zero-mean, so the
+ * DC bin carries almost no excitation energy and H[0] is regularization-dominated.
+ * Averaging 1-5 Hz gives a stable steady-state gain estimate instead. */
+const DC_REFERENCE_MIN_HZ = 1;
+const DC_REFERENCE_MAX_HZ = 5;
+
 /** Settling tolerance for synthetic step response (±2%) */
 const SETTLING_TOLERANCE = 0.02;
 
@@ -398,8 +405,31 @@ export function extractMetrics(
     overshootPercent: computeOvershoot(stepResponse),
     settlingTimeMs: computeSettlingTime(stepResponse),
     riseTimeMs: computeRiseTime(stepResponse),
-    dcGainDb: bode.magnitude.length > 0 ? bode.magnitude[0] : 0,
+    dcGainDb: computeDcGainDb(bode),
   };
+}
+
+/**
+ * Steady-state (DC) gain estimated from the 1-5 Hz band average.
+ * See DC_REFERENCE_MIN_HZ for why bin 0 is not used directly.
+ */
+export function computeDcGainDb(bode: BodeResult): number {
+  if (bode.magnitude.length === 0) return 0;
+
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < bode.frequencies.length; i++) {
+    const f = bode.frequencies[i];
+    if (f >= DC_REFERENCE_MIN_HZ && f <= DC_REFERENCE_MAX_HZ) {
+      sum += bode.magnitude[i];
+      count++;
+    }
+    if (f > DC_REFERENCE_MAX_HZ) break;
+  }
+  if (count > 0) return sum / count;
+
+  // Very coarse resolution — fall back to the first bin above DC, then bin 0
+  return bode.magnitude.length > 1 ? bode.magnitude[1] : bode.magnitude[0];
 }
 
 /**
@@ -408,8 +438,8 @@ export function extractMetrics(
 function computeBandwidth(bode: BodeResult): number {
   if (bode.frequencies.length === 0) return 0;
 
-  // DC gain = magnitude at lowest frequency
-  const dcGain = bode.magnitude[0];
+  // DC gain from the low-frequency reference band (not the unreliable bin 0)
+  const dcGain = computeDcGainDb(bode);
   const threshold = dcGain + BANDWIDTH_THRESHOLD_DB;
 
   let bandwidthHz = 0;

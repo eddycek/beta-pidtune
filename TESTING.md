@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3111 unit tests across 145 files + 37 Playwright E2E tests across 7 spec files** (last verified: April 11, 2026)
+**Total: 3189 unit tests across 145 files + 37 Playwright E2E tests across 7 spec files** (last verified: July 6, 2026)
 
 ### UI Components
 
@@ -243,7 +243,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 | File | Tests | Description |
 |------|-------|-------------|
-| `hooks/useConnection.test.ts` | 20 | Connection state, port management, error handling |
+| `hooks/useConnection.test.ts` | 20 | Connection state, port management, error handling, toast notifications (connect/disconnect/error, intentional vs unexpected, dedup) |
 | `hooks/useProfiles.test.ts` | 15 | Profile CRUD, event subscriptions |
 | `hooks/useSnapshots.test.ts` | 19 | Snapshot management, restore, event-driven updates |
 | `hooks/useTuningWizard.test.ts` | 24 | Wizard state, parse/analyze/apply lifecycle, PID/FF split, quick mode TF analysis |
@@ -266,7 +266,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 | File | Tests | Description |
 |------|-------|-------------|
-| `ipc/handlers.test.ts` | 113 | All 51 IPC handler channels: connection, FC info, profiles, snapshots, blackbox, PID config, analysis (filter+PID+TF), tuning apply (PID+filter+FF+bounds validation), snapshot restore, tuning session, BB settings fix, BF PID profile selection, reuse verification log on repeat tuning, handler registration |
+| `ipc/handlers.test.ts` | 125 | All 51 IPC handler channels: connection, FC info, profiles, snapshots, blackbox, PID config, analysis (filter+PID+TF), tuning apply (PID+filter+FF+bounds validation), firmware-exact bounds gate (cross-size PID envelope incl. D=100, d_min_gain/tpa_rate/dyn_notch/FF gates), informational-rec apply guard (advisory recs never auto-applied), snapshot restore, tuning session, BB settings fix, BF PID profile selection, reuse verification log on repeat tuning, handler registration |
 | `ipc/handlers/telemetryHandlers.test.ts` | 4 | Telemetry IPC handlers: get settings, set enabled, send now, error when manager null |
 | `ipc/handlers/diagnosticHandlers.test.ts` | 14 | Diagnostic IPC handler: send report, bundle build, gzip upload, Pro license gate, error handling, BBL upload (fire-and-forget, skip when disabled, file not found, upload failure, verification log selection, telemetry event) |
 | `ipc/handlers/types.test.ts` | 9 | IPC handler utility types, createResponse, parseDiffSetting |
@@ -296,7 +296,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 | `storage/ProfileManager.test.ts` | 23 | Profile CRUD, preset creation, current profile, link/unlink snapshots, export |
 | `storage/SnapshotManager.test.ts` | 18 | Snapshot creation via MSP, baseline management, server-side filtering, delete protection, tuning metadata |
 | `storage/BlackboxManager.test.ts` | 15 | Log save/list/get/delete/export, profile filtering, soft delete, initialization |
-| `storage/TuningSessionManager.test.ts` | 28 | Session CRUD, phase transitions, transition validation (invalid/backward rejected), per-profile persistence, Flash Tune phases |
+| `storage/TuningSessionManager.test.ts` | 35 | Session CRUD, phase transitions, transition validation (invalid/backward/cross-mode rejected), zero-change `*_analysis → completed` shortcut (all 3 tuning types), per-profile persistence, Flash Tune phases |
 | `storage/TuningHistoryManager.test.ts` | 32 | History archive, retrieval ordering, corrupted data handling, per-profile isolation, delete, updateLatestVerification, updateRecordVerification, tuningType field, getLatestByType filtering |
 
 ### Telemetry
@@ -328,7 +328,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 | File | Tests | Description |
 |------|-------|-------------|
-| `utils/verifyAppliedConfig.test.ts` | 17 | Full-config apply verification: PID match/mismatch/retry, filter match/mismatch, flash combined, sanity checks (P/I/D=0, filter bypassed), expected/actual recording, mode-aware scope (PID-only, filter-only, both) |
+| `utils/verifyAppliedConfig.test.ts` | 24 | Full-config apply verification: PID match/mismatch/retry, filter match/mismatch, flash combined, sanity checks (P/I/D=0, filter bypassed), expected/actual recording, mode-aware scope (PID-only, filter-only, both), feedforward read-back (MSP-readable match/mismatch, CLI-only skip, unknown → unchecked, optional getFeedforwardConfiguration) |
 
 ### Auto-Updater
 
@@ -357,11 +357,11 @@ npm run test:ui           # Visual interface with DOM snapshots
 | `analysis/FFTCompute.test.ts` | 20 | Hanning window, Welch's method, sine detection |
 | `analysis/SegmentSelector.test.ts` | 29 | Hover detection, throttle sweep detection, throttle normalization |
 | `analysis/NoiseAnalyzer.test.ts` | 31 | Peak detection, classification, noise floor |
-| `analysis/FilterRecommender.test.ts` | 100 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance, LPF2 recommendations, conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q, D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard |
+| `analysis/FilterRecommender.test.ts` | 104 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance (incl. disabled-notch dyn_notch_count=0 coverage), LPF2 recommendations (incl. D-term disable threshold boundary), conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q (3-4" midpoint 850), D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard |
 | `analysis/DataQualityScorer.test.ts` | 39 | Filter/PID data quality scoring, tier mapping, warnings, confidence adjustment, TF data quality, low coherence warning |
 | `analysis/FilterAnalyzer.test.ts` | 20 | End-to-end pipeline, progress reporting, segment fallback warnings, RPM context propagation, data quality scoring, throttle spectrogram, group delay |
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 17 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking |
-| `analysis/GroupDelayEstimator.test.ts` | 22 | Group delay estimation, filter phase response, latency measurement |
+| `analysis/GroupDelayEstimator.test.ts` | 28 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default) |
 
 ### Step Response Analysis
 
@@ -369,18 +369,18 @@ npm run test:ui           # Visual interface with DOM snapshots
 |------|-------|-------------|
 | `analysis/StepDetector.test.ts` | 16 | Derivative-based step detection, hold/cooldown |
 | `analysis/StepMetrics.test.ts` | 53 | Rise time, overshoot, settling, latency, ringing, FF contribution classification, trackingErrorRMS computation and aggregation, adaptive window, FF energy ratio |
-| `analysis/PIDRecommender.test.ts` | 247 | Flight PID anchoring, convergence, safety bounds, FF context, FF-aware recommendations, flight style thresholds, proportional severity scaling, TF-based recommendations, damping ratio, I-term, D-term effectiveness gating, prop wash integration, Rule TF-4 DC gain I-term, quad-size-aware bounds, severity-scaled sluggish P, P-too-high warning, P-too-low warning, informational flag, FF boost step 3, D-min/TPA advisory, structured ruleId on all recommendations, iterm_relax_cutoff (severity-aware floor), anti-gravity, thrust linear, RPM notch Q, D-max boost, dyn idle, TPA breakpoint/rate, D-term expo, pidsum limit, FF rate limit, RC link FF profiles, bounds clamping validation, style-aware d_min gain |
+| `analysis/PIDRecommender.test.ts` | 264 | Flight PID anchoring, convergence, safety bounds, FF context, FF-aware recommendations, flight style thresholds, proportional severity scaling, TF-based recommendations, damping ratio (micro max 1.0 vs standard 0.85), I-term, D-term effectiveness gating (informational P-DTE-BLOCK replacement), prop wash integration, Rule TF-4 DC gain I-term (style-aware threshold), quad-size-aware bounds (1" dMax 80/pTypical 72), severity-scaled sluggish P, P-too-high warning, P-too-low warning, informational flag, relaxed yaw ringing threshold (×1.5), FF boost step 3, D-min/TPA advisory, structured ruleId on all recommendations, iterm_relax_cutoff (severity-aware floor, aggressive typical 30), anti-gravity (700 g gate), thrust linear, RPM notch Q, D-max boost, dyn idle, TPA breakpoint/rate (small breakpoint 1250), D-term expo, pidsum limit (informational), FF rate limit, RC link FF profiles, bounds clamping validation, style-aware d_min gain |
 | `analysis/PIDAnalyzer.test.ts` | 28 | End-to-end pipeline, progress reporting, FF context wiring, flight style propagation, data quality scoring, cross-axis, propwash integration |
 | `analysis/CrossAxisDetector.test.ts` | 20 | Cross-axis coupling detection, axis interaction analysis |
 | `analysis/PropWashDetector.test.ts` | 15 | Propwash detection, wash-out frequency analysis |
 | `analysis/DTermAnalyzer.test.ts` | 8 | D-term effectiveness, energy ratio computation, dCritical flag |
 | `analysis/WindDisturbanceDetector.test.ts` | 11 | Wind/disturbance detection, gyro variance during hover, calm/moderate/windy classification, per-axis independence, hover-only analysis, multiple segments |
-| `analysis/MechanicalHealthChecker.test.ts` | 13 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases |
-| `analysis/DynamicLowpassRecommender.test.ts` | 28 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId |
+| `analysis/MechanicalHealthChecker.test.ts` | 21 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop -10 dB vs 5" -20 dB, undefined fallback) |
+| `analysis/DynamicLowpassRecommender.test.ts` | 31 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId, disable hysteresis (4 dB threshold, 4-6 dB gray zone leaves config untouched) |
 | `analysis/SliderMapper.test.ts` | 16 | Slider-aligned PID mapping, master multiplier, PD ratio, buildRecommendedPIDs, slider delta computation |
-| `analysis/FeedforwardAnalyzer.test.ts` | 60 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic |
+| `analysis/FeedforwardAnalyzer.test.ts` | 62 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic, FF-RC-SMOOTH advisory skipped for aggressive style |
 | `analysis/BayesianPIDOptimizer.test.ts` | 31 | Gaussian Process surrogate, Expected Improvement, Latin Hypercube Sampling, bounds |
-| `analysis/TransferFunctionEstimator.test.ts` | 23 | Wiener deconvolution, frequency response estimation, Bode plot data, PID recommendations from transfer function, DC gain extraction |
+| `analysis/TransferFunctionEstimator.test.ts` | 28 | Wiener deconvolution, frequency response estimation, Bode plot data, PID recommendations from transfer function, DC gain from 1-5 Hz band average (computeDcGainDb with bin-1/bin-0 fallbacks) |
 | `analysis/ThrottleTFAnalyzer.test.ts` | 8 | Per-band TF analysis, throttle binning, variance computation, TPA warning, band boundaries |
 | `analysis/VerificationMatcher.test.ts` | 33 | Flight similarity matching (mechanical peaks, throttle overlap, step count ratio), filter/PID/flash verification scoring, PID magnitude CoV sub-score, BBL fixture calibration with real flight data |
 | `analysis/ConvergenceDetector.test.ts` | 14 | Convergence detection, diminishing returns, iteration tracking, previous session comparison |
@@ -408,7 +408,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 | File | Tests | Description |
 |------|-------|-------------|
-| `analysis/headerValidation.test.ts` | 37 | GYRO_SCALED check, logging rate validation, BF version-aware debug mode, BBL firmware version parsing (with "Betaflight" prefix), BBL header RPM enrichment, independent field enrichment, preset gap analysis header fields |
+| `analysis/headerValidation.test.ts` | 45 | GYRO_SCALED check, logging rate validation (effective log rate = looptime × pInterval × pDenom), BF version-aware debug mode, BBL firmware version parsing (with "Betaflight" prefix), BBL header RPM enrichment, BBL-primary static cutoff/notch-range overrides, independent field enrichment, preset gap analysis header fields |
 
 ### E2E Workflow (Vitest)
 

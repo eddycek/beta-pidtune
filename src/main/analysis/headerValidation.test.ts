@@ -24,8 +24,10 @@ function createHeader(overrides: Partial<BBLLogHeader> = {}): BBLLogHeader {
     sFieldDefs: [],
     gFieldDefs: [],
     iInterval: 32,
+    // pInterval/pDenom = 1 → effective log rate equals gyro rate (1e6/looptime).
+    // Tests that exercise the pInterval·pDenom division set these explicitly.
     pInterval: 1,
-    pDenom: 32,
+    pDenom: 1,
     minthrottle: 1070,
     maxthrottle: 2000,
     motorOutputRange: 0,
@@ -109,6 +111,32 @@ describe('validateBBLHeader', () => {
 
   it('handles looptime = 0 gracefully (no rate warning)', () => {
     const header = createHeader({ looptime: 0 });
+    header.rawHeaders.set('debug_mode', '6');
+    const warnings = validateBBLHeader(header);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('uses effective log rate (looptime × pInterval × pDenom), not bare gyro rate', () => {
+    // 8 kHz gyro (looptime 125) but pDenom=2, pInterval=4 → 1e6/(125·4·2) = 1000 Hz log rate
+    const header = createHeader({ looptime: 125, pInterval: 4, pDenom: 2 });
+    header.rawHeaders.set('debug_mode', '6');
+    const warnings = validateBBLHeader(header);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].code).toBe('low_logging_rate');
+    expect(warnings[0].message).toContain('1000 Hz');
+    expect(warnings[0].message).toContain('500 Hz'); // Nyquist
+  });
+
+  it('does not warn when effective log rate meets 2 kHz despite division', () => {
+    // 8 kHz gyro, pDenom=2, pInterval=2 → 1e6/(125·2·2) = 2000 Hz log rate
+    const header = createHeader({ looptime: 125, pInterval: 2, pDenom: 2 });
+    header.rawHeaders.set('debug_mode', '6');
+    const warnings = validateBBLHeader(header);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('treats pInterval/pDenom of 0 as 1 (no division)', () => {
+    const header = createHeader({ looptime: 500, pInterval: 0, pDenom: 0 }); // 2000 Hz
     header.rawHeaders.set('debug_mode', '6');
     const warnings = validateBBLHeader(header);
     expect(warnings).toHaveLength(0);
@@ -327,6 +355,62 @@ describe('enrichSettingsFromBBLHeaders', () => {
     expect(result!.dterm_lpf1_dyn_min_hz).toBe(75);
     expect(result!.dterm_lpf1_dyn_max_hz).toBe(150);
   });
+
+  // BBL headers are the PRIMARY source for static cutoffs + dyn notch range —
+  // they always override values pre-populated from DEFAULT_FILTER_SETTINGS or MSP.
+  describe('BBL-primary static cutoff overrides', () => {
+    const staticHeaders = new Map([
+      ['gyro_lpf1_static_hz', '500'],
+      ['gyro_lpf2_static_hz', '500'],
+      ['dterm_lpf1_static_hz', '75'],
+      ['dterm_lpf2_static_hz', '150'],
+      ['dyn_notch_min_hz', '100'],
+      ['dyn_notch_max_hz', '600'],
+    ]);
+
+    it('overrides default static LPF cutoffs with BBL header values', () => {
+      // Defaults: gyro_lpf1 250, dterm_lpf1 150 — BBL says 500/75 (flight-time truth)
+      const result = enrichSettingsFromBBLHeaders(DEFAULT_FILTER_SETTINGS, staticHeaders);
+      expect(result).not.toBeNull();
+      expect(result!.gyro_lpf1_static_hz).toBe(500);
+      expect(result!.gyro_lpf2_static_hz).toBe(500);
+      expect(result!.dterm_lpf1_static_hz).toBe(75);
+      expect(result!.dterm_lpf2_static_hz).toBe(150);
+    });
+
+    it('overrides dyn notch min/max with BBL header values', () => {
+      const settings = { ...DEFAULT_FILTER_SETTINGS, dyn_notch_min_hz: 150, dyn_notch_max_hz: 500 };
+      const result = enrichSettingsFromBBLHeaders(settings, staticHeaders);
+      expect(result).not.toBeNull();
+      expect(result!.dyn_notch_min_hz).toBe(100);
+      expect(result!.dyn_notch_max_hz).toBe(600);
+    });
+
+    it('overrides even values already set from MSP (BBL wins)', () => {
+      const mspSettings = { ...DEFAULT_FILTER_SETTINGS, gyro_lpf1_static_hz: 300 };
+      const result = enrichSettingsFromBBLHeaders(mspSettings, staticHeaders);
+      expect(result).not.toBeNull();
+      expect(result!.gyro_lpf1_static_hz).toBe(500);
+    });
+
+    it('returns null when BBL statics match current settings (no change)', () => {
+      const matching = {
+        ...DEFAULT_FILTER_SETTINGS,
+        gyro_lpf1_static_hz: 500,
+        gyro_lpf2_static_hz: 500,
+        dterm_lpf1_static_hz: 75,
+        dterm_lpf2_static_hz: 150,
+        dyn_notch_min_hz: 100,
+        dyn_notch_max_hz: 600,
+      };
+      expect(enrichSettingsFromBBLHeaders(matching, staticHeaders)).toBeNull();
+    });
+
+    it('ignores non-numeric static header values', () => {
+      const headers = new Map([['gyro_lpf1_static_hz', 'garbage']]);
+      expect(enrichSettingsFromBBLHeaders(DEFAULT_FILTER_SETTINGS, headers)).toBeNull();
+    });
+  });
 });
 
 /**
@@ -388,6 +472,15 @@ describe('real BBL header parsing (VX3.5 BF 4.5.2)', () => {
   it('should enrich filter settings from real BBL headers', () => {
     const result = enrichSettingsFromBBLHeaders(DEFAULT_FILTER_SETTINGS, realHeaders);
     expect(result).not.toBeNull();
+
+    // Static cutoffs + dyn notch range: BBL is primary source and overrides
+    // the DEFAULT_FILTER_SETTINGS pre-population (250/150 defaults)
+    expect(result!.gyro_lpf1_static_hz).toBe(500);
+    expect(result!.gyro_lpf2_static_hz).toBe(500);
+    expect(result!.dterm_lpf1_static_hz).toBe(75);
+    expect(result!.dterm_lpf2_static_hz).toBe(150);
+    expect(result!.dyn_notch_min_hz).toBe(100);
+    expect(result!.dyn_notch_max_hz).toBe(600);
 
     // Dynamic lowpass (CSV format)
     expect(result!.gyro_lpf1_dyn_min_hz).toBe(250);

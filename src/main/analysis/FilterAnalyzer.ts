@@ -177,8 +177,8 @@ export async function analyze(
   // Step 6: Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);
 
-  // Step 7: Mechanical health diagnostic
-  const mechanicalHealth = checkMechanicalHealth(flightData, noiseProfile);
+  // Step 7: Mechanical health diagnostic (size-aware extreme-noise threshold)
+  const mechanicalHealth = checkMechanicalHealth(flightData, noiseProfile, options?.droneSize);
 
   // Step 8: Dynamic lowpass analysis
   // Always run analysis, but dedupe any existing dyn_min/dyn_max recommendations so we
@@ -273,8 +273,8 @@ async function analyzeEntireFlight(
   // Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);
 
-  // Mechanical health diagnostic
-  const mechanicalHealth = checkMechanicalHealth(flightData, noiseProfile);
+  // Mechanical health diagnostic (size-aware extreme-noise threshold)
+  const mechanicalHealth = checkMechanicalHealth(flightData, noiseProfile, options?.droneSize);
 
   // Always run analysis, but dedupe existing dyn_min/dyn_max recs (same as Step 8 above)
   const existingDynSettings = new Set(

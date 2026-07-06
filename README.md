@@ -11,7 +11,7 @@ FPVPIDlab reads your Blackbox log, analyzes the data (FFT noise spectrum, step r
 - **Safety-first** — automatic pre/post-tuning snapshots, all values clamped to proven safe bounds
 - **Multi-quad profiles** — auto-detects each FC by serial number, stores configs and history per quad
 - **Flight style adaptation** — Smooth (cinematic), Balanced (freestyle), Aggressive (racing) thresholds
-- **24 analysis modules** — FFT, step response, Wiener deconvolution, prop wash, D-term effectiveness, cross-axis coupling, throttle spectrograms, group delay, feedforward, dynamic lowpass, Bayesian optimizer, and more
+- **26 analysis modules** — FFT, step response, Wiener deconvolution, prop wash, D-term effectiveness, cross-axis coupling, throttle spectrograms, group delay, feedforward, dynamic lowpass, Bayesian optimizer, convergence detection, verification matching, and more
 - **Works offline** — demo mode with simulated FC for testing without hardware
 - **Anonymous telemetry** — opt-in usage telemetry with per-session analytics (tuning mode usage, drone sizes, quality scores, recommendation rule tracing, verification deltas; no flight data or PIDs ever sent)
 - **Freemium license system** — free tier (1 profile), Pro tier (unlimited profiles). Ed25519-signed offline-first license validation
@@ -93,7 +93,7 @@ Connecting with BF 4.2 or earlier will show an error and auto-disconnect. See [B
 - Severity-scaled P increase: P+5 for mild sluggishness, P+10 for very sluggish (rise time > 2× threshold)
 - P informational warnings when P is unusually high (>1.3× typical) or low (<0.7× typical) for the quad size
 - I-term rules: steady-state error detection with I increase/decrease recommendations (I min = 40)
-- Damping ratio validation: D/P ratio check (0.45–0.85 range) with automatic correction
+- Damping ratio validation: D/P ratio check (0.45–0.85 range; ceiling 1.0 on 1"/2.5" micros) with automatic correction
 - D-term effectiveness gating: measures D dampening vs noise ratio — redirects to filter tuning when D is mostly noise
 - Prop wash detection: throttle-down event analysis with severity scoring per axis
 - Cross-axis coupling detection: measures roll↔pitch interference
@@ -213,7 +213,7 @@ See [QUICK_START.md](./QUICK_START.md) for installation, setup, all available co
 
 All UI changes must include tests. Tests automatically run before commits. Coverage thresholds enforced: 80% lines/functions/statements, 75% branches.
 
-**Unit tests:** 3111 tests across 145 files — MSP protocol, storage managers, IPC handlers, UI components, hooks, BBL parser fuzz, analysis pipeline validation, telemetry, diagnostic, license, auto-updater.
+**Unit tests:** 3189 tests across 145 files — MSP protocol, storage managers, IPC handlers, UI components, hooks, BBL parser fuzz, analysis pipeline validation, telemetry, diagnostic, license, auto-updater.
 
 **Playwright E2E:** 37 tests across 7 spec files — launches real Electron app in demo mode, walks through complete tuning cycles (Filter Tune, PID Tune, Flash Tune, diagnostic reports, and stress-test edge cases).
 
@@ -247,7 +247,7 @@ pidlab/
 │   │   │   ├── commands.ts      # MSP command definitions
 │   │   │   └── types.ts         # MSP type definitions
 │   │   ├── blackbox/            # BBL binary log parser (6 modules, 245 tests)
-│   │   ├── analysis/            # Signal processing & tuning engine (24 modules)
+│   │   ├── analysis/            # Signal processing & tuning engine (26 modules)
 │   │   │   ├── FFTCompute.ts              # Welch's method, Hanning window
 │   │   │   ├── SegmentSelector.ts         # Hover/sweep segment detection
 │   │   │   ├── NoiseAnalyzer.ts           # Peak detection, noise classification
@@ -269,6 +269,8 @@ pidlab/
 │   │   │   ├── ThrottleSpectrogramAnalyzer.ts # Per-throttle-bin FFT
 │   │   │   ├── GroupDelayEstimator.ts     # Filter chain latency estimation
 │   │   │   ├── BayesianPIDOptimizer.ts    # GP-based multi-session optimizer
+│   │   │   ├── ConvergenceDetector.ts     # Cross-session convergence detection
+│   │   │   ├── VerificationMatcher.ts     # Verification flight similarity matching
 │   │   │   ├── MechanicalHealthChecker.ts # Frame/motor health diagnostics
 │   │   │   ├── WindDisturbanceDetector.ts # Wind/disturbance detection
 │   │   │   ├── headerValidation.ts        # BB header diagnostics
@@ -641,7 +643,7 @@ Analyzes gyro noise to compute optimal lowpass cutoffs. The analysis code (`Filt
 
 The **minimum cutoffs** are derived from the official Betaflight guides. The **maximum cutoffs** represent the point where further relaxation provides negligible latency benefit. With RPM filter active, maximums are raised because 36 per-motor notch filters already handle motor noise, so the lowpass can afford to be more relaxed.
 
-**Propwash floor:** Gyro LPF1 is never pushed below 100 Hz (configurable per flight style) to preserve D-term responsiveness in the 50–100 Hz prop wash frequency range.
+**Propwash floor:** Gyro LPF1 is never pushed below 100 Hz (configurable per flight style) to preserve responsiveness in the 20–90 Hz prop wash band. This is a conservative FPVPIDlab house rule — the BF wiki's "avoid below 100 Hz" guidance concerns notch filters, and the community D-term floor is ~80 Hz (Oscar Liang).
 
 #### Noise-Based Targeting (Linear Interpolation)
 
@@ -668,24 +670,24 @@ The -10 dB and -70 dB anchor points are calibrated from real Blackbox logs acros
 | **Noise floor → lowpass (medium)** | Noise -50 to -30 dB, \|target − current\| > 20 Hz | Set gyro/D-term LPF1 to noise-based target | Low | Medium noise: wider deadzone (20 Hz), low confidence to avoid churn |
 | **Dead zone** | \|target − current\| ≤ 5 Hz (high noise) or ≤ 20 Hz (medium noise) | No change recommended | — | Prevents micro-adjustments that add no real benefit |
 | **Dynamic mode targeting** | Any noise-floor rule fires AND `dyn_min_hz > 0` | Target `dyn_min_hz` instead of `static_hz`; proportionally adjust `dyn_max_hz` to maintain ratio; lower `static_hz` to ≤ `dyn_min` (BF constraint) | Same as base rule | When dynamic lowpass is active, the tightest cutoff is `dyn_min` — tuning static would have no effect |
-| **Resonance peak → cutoff** | Peak ≥ 12 dB above floor AND outside dyn_notch range AND below current cutoff | Lower cutoff to peakFreq − 20 Hz (clamped to bounds). When dynamic active, targets `dyn_min_hz` | High | Notch-aware: peaks within dyn_notch_min–max are handled by the notch, not LPF |
+| **Resonance peak → cutoff** | Peak ≥ 12 dB above floor AND outside dyn_notch coverage AND below current cutoff | Lower cutoff to peakFreq − 20 Hz (clamped to bounds). When dynamic active, targets `dyn_min_hz` | High | Notch-aware: peaks within dyn_notch_min–max count as covered only when `dyn_notch_count > 0` — with notches disabled, the LPF rule handles them |
 | **Disabled gyro LPF + resonance** | gyro_lpf1 = 0 (disabled) AND resonance peak outside notch range | Enable gyro LPF1 at peakFreq − 20 Hz | High | Common BF 4.4+ config with RPM filter; re-enable when needed |
 | **Dynamic notch range** | Peak below `dyn_notch_min_hz` | Lower dyn_notch_min to peakFreq − 20 Hz (floor: 50 Hz) | Medium | Notch can't track peaks outside its configured range |
 | **Dynamic notch range** | Peak above `dyn_notch_max_hz` | Raise dyn_notch_max to peakFreq + 20 Hz (ceiling: 1000 Hz) | Medium | Same as above, upper bound |
-| **RPM → notch count** | RPM filter active AND dyn_notch_count > 1 | Reduce dyn_notch_count to 1 | High | Motor noise handled by RPM notches; fewer dynamic notches = less CPU + latency |
+| **RPM → notch count** | RPM filter active AND dyn_notch_count > size target (2 for sub-5", 1 for 5"+) | Reduce dyn_notch_count toward size target, max step 2 per iteration | High | Motor noise handled by RPM notches; sub-5" keeps 2 notches for frame vibration modes. Conservative stepping avoids removing too many notches at once |
 | **RPM → notch Q** | RPM filter active AND no strong frame resonance | Raise dyn_notch_q to 500 | High | Only weak resonances remain; narrower notch = less signal distortion |
-| **RPM → notch Q (resonance)** | RPM filter active AND strong frame resonance (≥ 12 dB, 80-200 Hz) | Keep dyn_notch_q at 300 | High | Broad frame resonance needs wider notch to be effective |
+| **RPM → notch Q (resonance)** | RPM filter active AND strong frame resonance (≥ 12 dB, 80-200 Hz) | Keep dyn_notch_q at 300 | Medium | Broad frame resonance needs wider notch to be effective |
 | **LPF2 disable (gyro)** | RPM active AND noise < -45 dB | Disable gyro LPF2 | Medium | Very clean signal: LPF2 adds latency with no benefit |
 | **LPF2 disable (D-term)** | RPM active AND noise < -45 dB | Disable D-term LPF2 | Medium | Clean signal with RPM: D-term LPF2 latency unnecessary |
 | **LPF2 enable (gyro)** | No RPM AND noise ≥ -30 dB AND LPF2 disabled | Enable gyro LPF2 | Low | Noisy without RPM: extra filtering protects motors |
 | **LPF2 enable (D-term)** | No RPM AND noise ≥ -30 dB AND LPF2 disabled | Enable D-term LPF2 | Low | High noise without RPM needs additional D-term protection |
 | **F-DLPF-GYRO** | Throttle spectrogram noise increases ≥ 6 dB, Pearson ≥ 0.6, gyro LPF1 > 0, AND gyro dynamic NOT already active | Enable `gyro_lpf1_dyn_min_hz` (current static cutoff) and `gyro_lpf1_dyn_max_hz` (current static × 2) | Medium | BF 2:1 ratio convention: dyn_min = static, dyn_max = 2 × static. Throttle-ramped cutoff: more filtering at high throttle, less latency at cruise |
 | **F-DLPF-DTERM** | Same throttle-noise trigger as F-DLPF-GYRO AND D-term LPF1 > 0 AND D-term dynamic NOT already active | Enable `dterm_lpf1_dyn_min_hz` (current static cutoff) and `dterm_lpf1_dyn_max_hz` (current static × 2) | Medium | BF 2:1 ratio convention. D amplifies high-frequency noise — dynamic filtering reduces motor heating at high throttle while preserving stick feel at cruise |
-| **F-DLPF-GYRO-OFF** | Throttle noise delta < 6 dB OR correlation < 0.6, AND `gyro_lpf1_dyn_min_hz > 0` | Disable gyro dynamic lowpass (`dyn_min_hz → 0`) | Low | Dynamic adds complexity for no benefit when noise is uniform across throttle |
-| **F-DLPF-DTERM-OFF** | Same no-throttle-noise trigger AND `dterm_lpf1_dyn_min_hz > 0` | Disable D-term dynamic lowpass (`dyn_min_hz → 0`) | Low | Simplify filter stack when throttle-dependent noise is absent |
+| **F-DLPF-GYRO-OFF** | No throttle-noise trigger AND noise delta < 4 dB AND `gyro_lpf1_dyn_min_hz > 0` | Disable gyro dynamic lowpass (`dyn_min_hz → 0`) | Low | Hysteresis: enable at ≥ 6 dB, disable only below 4 dB — deltas in the 4–6 dB gray zone leave the config untouched (prevents flip-flop) |
+| **F-DLPF-DTERM-OFF** | Same no-throttle-noise trigger (delta < 4 dB) AND `dterm_lpf1_dyn_min_hz > 0` | Disable D-term dynamic lowpass (`dyn_min_hz → 0`) | Low | Simplify filter stack when throttle-dependent noise is absent (same 4/6 dB hysteresis) |
 | **Deduplication** | Multiple rules target same setting | Keep more aggressive value, upgrade confidence | — | Ensures a single coherent recommendation per setting |
 
-**RPM filter awareness:** When RPM filter is active, safety bounds widen because 36 per-motor notch filters already handle motor noise. The dynamic notch is optimized (count 3→1, Q 300→500) since only frame resonances remain.
+**RPM filter awareness:** When RPM filter is active, safety bounds widen because 36 per-motor notch filters already handle motor noise. The dynamic notch is optimized (count stepped down toward the size target — 2 for sub-5", 1 for 5"+ — and Q 300→500) since only frame resonances remain.
 
 **Dynamic lowpass awareness:** When `dyn_min_hz > 0`, the FilterRecommender recognizes that the effective cutoff is `dyn_min` (not `static_hz`). All noise-floor and resonance rules transparently target `dyn_min_hz`/`dyn_max_hz` instead of `static_hz`, maintaining the dynamic range ratio. The DynamicLowpassRecommender only fires enable/disable rules when the dynamic state needs to change — when dynamic is already active, the FilterRecommender handles tuning directly.
 
@@ -762,7 +764,7 @@ All recommendations are anchored to the PID values from the Blackbox log header 
 | Sluggish rise time | 120 ms | 80 ms | 50 ms |
 | Steady-state error max | 8% | 5% | 3% |
 
-*Yaw axis uses relaxed thresholds (1.5× overshoot limit, 1.5× sluggish threshold).*
+*Yaw axis uses relaxed thresholds (1.5× overshoot limit, 1.5× ringing limit, 1.5× sluggish threshold).*
 
 **PID Decision Table (Balanced thresholds shown):**
 
@@ -791,7 +793,7 @@ All recommendations are anchored to the PID values from the Blackbox log header 
 | **Damping ratio (overdamped)** | D/P > 0.85, no recs exist | D ↓ to reach 0.85 ratio | Reduces motor heat and noise |
 | **D-term effectiveness (critical)** | D increase rec + dCritical flag | Upgrade confidence → High | D-term is doing useful dampening work, increase is safe |
 | **D-term effectiveness (balanced)** | D increase rec + effectiveness 0.3–0.7 | Advisory note: monitor temps | D has some noise cost, user should check motor heat |
-| **D-term effectiveness (low)** | D increase rec + effectiveness < 0.3 | Downgrade confidence → Low + redirect | D is mostly noise — improve filters before increasing D |
+| **D-term effectiveness (low)** | D increase rec + effectiveness < 0.3 | Block the D increase; replace with informational "improve filters first" rec (`P-DTE-BLOCK`) | D is mostly noise — more D would mainly heat motors. The informational rec tells the pilot to run a Filter Tune before revisiting D |
 | **D-term effectiveness (low, decrease)** | D decrease rec + effectiveness < 0.3 | Advisory note appended | D may not be doing much dampening — filter issue? |
 | **Prop wash (severe + D rec)** | Severe prop wash (≥ 5×) on axis with existing D ↑ | Upgrade confidence → High | Prop wash confirms D increase will help |
 | **Prop wash (severe, no D rec)** | Severe prop wash (≥ 5×) on worst axis, no D rec | D ↑ +5 on worst axis | Medium | Prop wash oscillation during descents needs more dampening |
@@ -799,7 +801,8 @@ All recommendations are anchored to the PID values from the Blackbox log header 
 | **PW-DMIN-GAIN** | Propwash severe + d_min active + gain < 35 | Increase d_min_gain to size-appropriate value (30-35 freestyle) | Medium | Higher gain ramps D faster during propwash events |
 | **PW-DMIN-GAP** | d_min active + (d_max - d_min)/d_max < 20% | Lower d_min to d_max × 0.7 | Low | Wider gap gives D more room to ramp during propwash |
 | **PW-DMIN-ENABLE** | Propwash severe + d_min disabled | Enable d_min at d_max × 0.7 | Low | d_min reduces noise at rest while allowing high D during propwash |
-| **PW-IRELAX-CUTOFF** | Propwash severe + iterm_relax_cutoff > 15 | Lower cutoff by 5 (min 15) | Medium | Reduces I-term bounce-back during throttle transitions |
+| **PW-IRELAX-CUTOFF** | Propwash severe (≥ 5×) + iterm_relax_cutoff > 7 | Lower cutoff by 5 (floor 7) | Medium | Progressive reduction per community guidance "15 → 10 → 7" for severe propwash |
+| **PW-IRELAX-CUTOFF-MOD** | Propwash moderate (2–5×) + iterm_relax_cutoff > 15 | Lower cutoff by 5 (floor 15) | Low | Mild I-term suppression for moderate propwash without sacrificing tracking |
 | **PW-IRELAX-ENABLE** | Propwash detected + iterm_relax OFF | Enable iterm_relax | Medium | I-term windup worsens propwash bounce-back |
 | **PW-TPA-MODE** | Propwash severe + TPA mode = PD | Switch to D-only mode | Medium | PD mode reduces P during climb, losing authority |
 | **PW-TPA-BREAKPOINT** | Propwash severe + breakpoint < 1300 | Raise to 1350 | Medium | Low breakpoint attenuates D too early during climb |
@@ -814,7 +817,7 @@ Transfer function rules complement step-response rules. Both run in the same `re
 | **TF-1** | Phase margin < 45° (critical: < 30°) | D ↑ | +5 / +10 | Medium |
 | **TF-2** | Synthetic overshoot > threshold | Same as Rule 1a | varies | Medium |
 | **TF-3** | Bandwidth < threshold (smooth: 30, balanced: 40, aggressive: 60 Hz; yaw: × 0.7), no overshoot | P ↑ | +5 | Medium |
-| **TF-4** | DC gain < -1 dB (poor steady-state tracking) | I ↑ | +5 / +10 | Low / Medium |
+| **TF-4** | DC gain < style-aware threshold `20·log10(1 − SSE_max/100)` dB (smooth ≈ −0.7, balanced ≈ −0.4, aggressive ≈ −0.3) | I ↑ | +5 (+10 at 2× threshold) | Low / Medium |
 
 Base confidence is adjusted by the same post-processing as step-response rules. There is no blanket confidence cap for Flash Tune — gating logic is identical to PID Tune.
 
@@ -822,11 +825,13 @@ Base confidence is adjusted by the same post-processing as step-response rules. 
 
 Default bounds (5") shown. When drone size is known from the profile, per-size bounds apply — see `QUAD_SIZE_BOUNDS` in `constants.ts`.
 
-| Parameter | Min | Max (1-2") | Max (3-4") | Max (5") | Max (6-10") |
-|-----------|-----|-----------|-----------|---------|------------|
-| P gain | 20 | 80 | 100-110 | 120 | 120 |
-| D gain | 15 | 50 | 60-70 | 80 | 90-100 |
-| I gain | 40 | 100 | 110-120 | 120 | 120 |
+| Parameter | Min | Max (1") | Max (2.5") | Max (3-4") | Max (5") | Max (6-7") |
+|-----------|-----|---------|-----------|-----------|---------|------------|
+| P gain | 30 (1") / 25 (2.5") / 20 (3"+) | 90 | 90 | 100-110 | 120 | 120 |
+| D gain | 15 | 80 | 55 | 60-70 | 80 | 90-100 |
+| I gain | 40 | 100 | 110 | 110-120 | 120 | 120 |
+
+1" (whoop) bounds reflect real preset clusters (whoop_justice, whoop_ayyykayyy, UAV Tech Whoop: P 63-83, D 57-79 on roll/pitch) — micro quads legitimately run high P *and* high D.
 
 **Key design decisions:**
 
@@ -836,7 +841,7 @@ Default bounds (5") shown. When drone size is known from the profile, per-size b
 - **Flight-PID anchoring** — Targets are relative to PIDs from the Blackbox header (not current FC values), preventing drift when PIDs change between flights.
 - **Feedforward awareness** — Detects FF-dominated overshoot via `|pidF|` vs `|pidP|` comparison at overshoot peak. Skips P/D changes and recommends `feedforward_boost` reduction instead. FF energy ratio gates P-decrease confidence.
 - **Flight style adaptation** — Smooth pilots get tighter overshoot tolerances; Aggressive pilots tolerate more overshoot for sharper response.
-- **Damping ratio validation** — Post-processing ensures D/P stays within 0.45–0.85 range.
+- **Damping ratio validation** — Post-processing ensures D/P stays within 0.45–0.85 (upper bound 1.0 for 1"/2.5" micros — whoop presets legitimately run D/P ≈ 0.9–0.95).
 - **D-term effectiveness gating** — Three tiers: >0.7 (boost confidence), 0.3–0.7 (allow with advisory), <0.3 (redirect to filter tuning). Prevents blindly increasing D when the problem is noise.
 - **Prop wash integration** — Severe prop wash (≥5× baseline, 20–90 Hz) boosts D-increase confidence or generates D +5 on worst axis. Minimum 3 events required.
 

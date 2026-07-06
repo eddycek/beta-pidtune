@@ -12,7 +12,7 @@
  * recorded for diagnostic bundles, not for full-state comparison.
  */
 
-import type { PIDConfiguration } from '@shared/types/pid.types';
+import type { PIDConfiguration, FeedforwardConfiguration } from '@shared/types/pid.types';
 import type { CurrentFilterSettings } from '@shared/types/analysis.types';
 import type { AppliedChange, TuningType } from '@shared/types/tuning.types';
 
@@ -21,6 +21,7 @@ interface VerifyMSPClient {
   getPIDConfiguration(): Promise<PIDConfiguration>;
   getFilterConfiguration(): Promise<CurrentFilterSettings>;
   setPIDConfiguration(config: PIDConfiguration): Promise<void>;
+  getFeedforwardConfiguration?(): Promise<FeedforwardConfiguration>;
   isConnected(): boolean;
 }
 
@@ -79,6 +80,38 @@ function buildActualPIDMap(config: PIDConfiguration): Record<string, number> {
 
 /** Settings that can only be set via CLI and not read back via MSP */
 const CLI_ONLY_SETTINGS = new Set(['rpm_filter_q']);
+
+/** Feedforward-stage settings readable via MSP_PID_ADVANCED → FeedforwardConfiguration key */
+const FF_MSP_READABLE: Record<string, keyof FeedforwardConfiguration> = {
+  feedforward_boost: 'boost',
+  feedforward_smooth_factor: 'smoothFactor',
+  feedforward_jitter_factor: 'jitterFactor',
+  feedforward_max_rate_limit: 'maxRateLimit',
+  d_min_gain: 'dMinGain',
+  iterm_relax: 'itermRelax',
+  iterm_relax_cutoff: 'itermRelaxCutoff',
+};
+
+/** Feedforward-stage settings not currently parsed by getFeedforwardConfiguration().
+ * Several DO have MSP_PID_ADVANCED offsets in mspLayouts.ts (tpa_*, anti_gravity_gain,
+ * feedforward_averaging, …) — wiring them in would extend verification coverage.
+ * Until then they are skipped during verification (same treatment as CLI_ONLY_SETTINGS). */
+const FF_CLI_ONLY = new Set([
+  'feedforward_averaging',
+  'tpa_rate',
+  'tpa_breakpoint',
+  'tpa_mode',
+  'tpa_low_always',
+  'anti_gravity_gain',
+  'thrust_linear',
+  'dyn_idle_min_rpm',
+  'pidsum_limit',
+  'pidsum_limit_yaw',
+  'rc_smoothing_auto_factor',
+  'vbat_sag_compensation',
+  'simplified_dmax_gain',
+  'dterm_lpf1_dyn_expo',
+]);
 
 /** Build expected filter map — MSP-readable fields + dynamic lowpass */
 function buildExpectedFilterMap(
@@ -201,7 +234,8 @@ export async function verifyAppliedConfig(
   mspClient: VerifyMSPClient,
   tuningType: TuningType,
   appliedPIDChanges?: AppliedChange[],
-  appliedFilterChanges?: AppliedChange[]
+  appliedFilterChanges?: AppliedChange[],
+  appliedFeedforwardChanges?: AppliedChange[]
 ): Promise<VerifyResult> {
   const expected: Record<string, number> = {};
   const actual: Record<string, number> = {};
@@ -321,6 +355,36 @@ export async function verifyAppliedConfig(
         } else if (act !== change.newValue) {
           mismatches.push(`${change.setting}: expected ${change.newValue}, got ${act}`);
         }
+      }
+    }
+  }
+
+  // Read feedforward config and verify MSP-readable FF-stage changes.
+  // FF changes are written via CLI but most land in MSP_PID_ADVANCED, so they
+  // CAN be read back — previously they were applied+saved with no verification.
+  if (
+    appliedFeedforwardChanges &&
+    appliedFeedforwardChanges.length > 0 &&
+    mspClient.getFeedforwardConfiguration
+  ) {
+    const ffConfig = await mspClient.getFeedforwardConfiguration();
+    for (const change of appliedFeedforwardChanges) {
+      if (FF_CLI_ONLY.has(change.setting)) continue;
+      const configKey = FF_MSP_READABLE[change.setting];
+      if (configKey === undefined) {
+        unchecked.push(change.setting);
+        continue;
+      }
+      const act = ffConfig[configKey];
+      if (act === undefined) {
+        // Optional field — older firmware/layouts may not report it via MSP
+        unchecked.push(change.setting);
+        continue;
+      }
+      expected[change.setting] = change.newValue;
+      actual[change.setting] = act as number;
+      if (act !== change.newValue) {
+        mismatches.push(`${change.setting}: expected ${change.newValue}, got ${act}`);
       }
     }
   }

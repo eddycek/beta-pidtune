@@ -390,6 +390,11 @@ export const DAMPING_RATIO_MIN = 0.45;
 /** Maximum healthy D/P ratio. Above this the quad is overdamped (sluggish motors, noise amplification). */
 export const DAMPING_RATIO_MAX = 0.85;
 
+/** Maximum healthy D/P ratio for micro quads (1-2.5").
+ * Whoop presets legitimately run more damping: whoop_justice D/P ≈ 0.91-0.94,
+ * whoop_ayyykayyy ≈ 0.95 — the standard 0.85 ceiling would fight stock tunes. */
+export const DAMPING_RATIO_MAX_MICRO = 1.0;
+
 /** Minimum D/P change (in absolute terms) to emit a damping ratio recommendation.
  * Prevents trivial 1-point adjustments from rounding. */
 export const DAMPING_RATIO_DEADZONE = 3;
@@ -426,7 +431,9 @@ export interface QuadSizeBounds {
  * large (6-7").
  */
 export const QUAD_SIZE_BOUNDS: Record<DroneSize, QuadSizeBounds> = {
-  '1"': { pMin: 30, pMax: 80, dMin: 15, dMax: 50, iMin: 40, iMax: 100, pTypical: 65 },
+  // 1" whoop presets (whoop_justice, whoop_ayyykayyy, UAV Tech Whoop, Air65 BNF)
+  // cluster P 63-83 / D 57-79 on roll+pitch — bounds must not clamp a stock tune.
+  '1"': { pMin: 30, pMax: 90, dMin: 15, dMax: 80, iMin: 40, iMax: 100, pTypical: 72 },
   '2.5"': { pMin: 25, pMax: 90, dMin: 15, dMax: 55, iMin: 40, iMax: 110, pTypical: 42 },
   '3"': { pMin: 20, pMax: 100, dMin: 15, dMax: 60, iMin: 40, iMax: 110, pTypical: 45 },
   '4"': { pMin: 20, pMax: 110, dMin: 15, dMax: 70, iMin: 40, iMax: 120, pTypical: 46 },
@@ -486,14 +493,17 @@ export const PROPWASH_MIN_EVENTS = 3;
 
 /** I-term relax cutoff ranges by flight style.
  * Racing needs higher cutoff (less relax) for snappier response.
- * Cinematic needs lower cutoff (more relax) for smoother recovery. */
+ * Cinematic needs lower cutoff (more relax) for smoother recovery.
+ * BF wiki (I Term Relax Explained): "30-40 is good for racing, 15 for
+ * freestyle, 10 or even lower for big heavier quads"; race whoop presets
+ * span 20-45, so the aggressive band is 20-40 with a typical of 30. */
 export const ITERM_RELAX_CUTOFF_BY_STYLE: Record<
   FlightStyle,
   { min: number; max: number; typical: number }
 > = {
   smooth: { min: 5, max: 10, typical: 7 },
   balanced: { min: 10, max: 15, typical: 12 },
-  aggressive: { min: 20, max: 30, typical: 25 },
+  aggressive: { min: 20, max: 40, typical: 30 },
 };
 
 /** Minimum deviation (%) from style-appropriate range to trigger recommendation */
@@ -623,13 +633,16 @@ export function lookupRCLinkProfile(rcLinkRateHz: number | undefined): RCLinkPro
 /** BF 4.5 default anti_gravity_gain */
 export const ANTI_GRAVITY_GAIN_DEFAULT = 80;
 
-/** Weight threshold (grams) above which anti-gravity increase is recommended */
-export const ANTI_GRAVITY_WEIGHT_THRESHOLD_G = 400;
+/** Weight threshold (grams) above which anti-gravity increase is recommended.
+ * Community presets only raise anti-gravity on genuinely heavy craft:
+ * SupaflyFPV 7" = 120, UAV Tech 8-9" cinelifter = 110 — their 5" presets
+ * keep the default 80. 700 g excludes typical 5" freestyle builds (~650 g). */
+export const ANTI_GRAVITY_WEIGHT_THRESHOLD_G = 700;
 
-/** Recommended anti-gravity gain for heavy builds (>400g with high SSE) */
+/** Recommended anti-gravity gain for heavy builds (>700g with high SSE) */
 export const ANTI_GRAVITY_HEAVY_RECOMMENDED = 120;
 
-/** Recommended anti-gravity gain for medium builds (>400g without high SSE) */
+/** Recommended anti-gravity gain for medium builds (>700g without high SSE) */
 export const ANTI_GRAVITY_MEDIUM_RECOMMENDED = 110;
 
 /** Minimum mean steady-state error (%) across roll+pitch to trigger heavy recommendation */
@@ -676,10 +689,9 @@ export interface RpmFilterQRange {
 export const RPM_FILTER_Q_BY_SIZE: Record<DroneSize, RpmFilterQRange> = {
   '1"': { min: 700, max: 1000, midpoint: 850 },
   '2.5"': { min: 700, max: 1000, midpoint: 850 },
-  // 3-4" freestyle quads use oversized motors (1404-1507) with broader harmonic spread
-  // than true micros — wider notches (lower Q) provide better coverage
-  '3"': { min: 600, max: 900, midpoint: 750 },
-  '4"': { min: 600, max: 900, midpoint: 750 },
+  // SupaflyFPV EasyTune presets set rpm_filter_q = 1000 for 3-4"
+  '3"': { min: 700, max: 1000, midpoint: 850 },
+  '4"': { min: 700, max: 1000, midpoint: 850 },
   '5"': { min: 700, max: 1000, midpoint: 850 },
   '6"': { min: 600, max: 800, midpoint: 700 },
   '7"': { min: 500, max: 700, midpoint: 600 },
@@ -703,33 +715,12 @@ export const DTERM_DYN_EXPO_BY_STYLE: Record<FlightStyle, { min: number; max: nu
 /** BF default dterm_lpf1_dyn_expo */
 export const DTERM_DYN_EXPO_DEFAULT = 5;
 
-// ---- Dynamic Lowpass Multipliers Per Size ----
-// Source: betaflight/firmware-presets (SupaflyFPV, UAV Tech, BF defaults)
-// BF simplified tuning formula: dyn_min = base × mult/100, dyn_max = dyn_min × 2
-// Gyro base: 250 Hz, DTerm base: 75 Hz
+// ---- Dynamic Lowpass Base Frequencies ----
+// Note: a per-size multiplier table (DYNAMIC_LOWPASS_BY_SIZE) used to live here
+// but was never wired into any recommendation path, and current SupaflyFPV
+// presets disable gyro LPF1 entirely with RPM filtering — removed as dead code.
 
-export interface DynamicLowpassSizeProfile {
-  /** BF simplified_gyro_filter_multiplier (percentage, 100 = BF default) */
-  gyroMultiplier: number;
-  /** BF simplified_dterm_filter_multiplier (percentage) */
-  dtermMultiplier: number;
-}
-
-/**
- * Per-size dynamic lowpass multipliers derived from community presets.
- * Used to validate dynamic lowpass recommendations against size-appropriate ranges.
- */
-export const DYNAMIC_LOWPASS_BY_SIZE: Record<DroneSize, DynamicLowpassSizeProfile> = {
-  '1"': { gyroMultiplier: 140, dtermMultiplier: 140 },
-  '2.5"': { gyroMultiplier: 140, dtermMultiplier: 140 },
-  '3"': { gyroMultiplier: 140, dtermMultiplier: 140 }, // SupaflyFPV 3-4"
-  '4"': { gyroMultiplier: 120, dtermMultiplier: 140 }, // between 3-4" and 5"
-  '5"': { gyroMultiplier: 100, dtermMultiplier: 100 }, // BF default
-  '6"': { gyroMultiplier: 80, dtermMultiplier: 120 }, // between 5" and 7"
-  '7"': { gyroMultiplier: 80, dtermMultiplier: 120 }, // SupaflyFPV 7"
-};
-
-/** BF simplified tuning base frequencies */
+/** BF simplified tuning base frequencies (max = 2 × min per BF convention) */
 export const BF_GYRO_LPF1_DYN_BASE_HZ = 250;
 export const BF_DTERM_LPF1_DYN_BASE_HZ = 75;
 
@@ -854,7 +845,9 @@ export interface TPASizeProfile {
 }
 
 export const TPA_BY_SIZE: Record<string, TPASizeProfile> = {
-  small: { rate: 50, breakpoint: 1500, mode: TPA_MODE_D_ONLY },
+  // Whoop/tiny presets (whoop_justice, whoop_ayyykayyy, tiny_karate) keep rate
+  // near default but lower the breakpoint to ~1250.
+  small: { rate: 50, breakpoint: 1250, mode: TPA_MODE_D_ONLY },
   standard: { rate: 65, breakpoint: 1350, mode: TPA_MODE_D_ONLY },
   large: { rate: 80, breakpoint: 1250, mode: TPA_MODE_D_ONLY },
 };

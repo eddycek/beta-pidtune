@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Updated:** April 11, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3111 unit tests, 145 files + 37 Playwright E2E tests**
+**Last Updated:** July 6, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3189 unit tests, 145 files + 37 Playwright E2E tests**
 
 ---
 
@@ -57,7 +57,7 @@
 │  │  ┌───┴──────────┐  ┌─────────────────┐  ┌──────────────────┐      │  │
 │  │  │MSPConnection │  │ BlackboxParser  │  │ Analysis Engine │      │  │
 │  │  │ + CLI Mode   │  │ (6 modules,     │  │ FFT + Step Resp │      │  │
-│  │  │ + fcEntered  │  │  227 tests)     │  │ (24 modules,    │      │  │
+│  │  │ + fcEntered  │  │  227 tests)     │  │ (26 modules,    │      │  │
 │  │  │   CLI flag   │  │                 │  │  661 tests)     │      │  │
 │  │  └───┬──────────┘  └─────────────────┘  └──────────────────┘      │  │
 │  │      │                                                             │  │
@@ -845,7 +845,7 @@ Hardware error (FC timeout, USB disconnect)
 
 ## Testing Strategy
 
-**3111 unit tests across 145 files + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
+**3189 unit tests across 145 files + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
 
 | Area | Files | Tests |
 |------|-------|-------|
@@ -870,4 +870,4 @@ Hardware error (FC timeout, USB disconnect)
 
 **Pre-commit hook** (husky + lint-staged) blocks commits when tests fail. All async UI tests use `waitFor()`. Mock layer: `src/renderer/test/setup.ts` mocks entire `window.betaflight` API.
 
-**Playwright E2E** (demo mode): Launches real Electron app with mock FC, clicks through full tuning workflow (Filter Tune, PID Tune, Flash Tune, and diagnostic reports). Run via `npm run test:e2e` (25 tests) or `npm run demo:generate-history` (generators, session count via `GENERATE_COUNT` env var). 37 tests across 7 spec files. See `e2e/` directory and [docs/OFFLINE_UX_TESTING.md](./docs/OFFLINE_UX_TESTING.md).
+**Playwright E2E** (demo mode): Launches real Electron app with mock FC, clicks through full tuning workflow (Filter Tune, PID Tune, Flash Tune, and diagnostic reports). Run via `npm run test:e2e` (32 tests in normal runs) or `npm run demo:generate-history` (generators, session count via `GENERATE_COUNT` env var). 37 tests across 7 spec files. See `e2e/` directory and [docs/complete/OFFLINE_UX_TESTING.md](./docs/complete/OFFLINE_UX_TESTING.md).

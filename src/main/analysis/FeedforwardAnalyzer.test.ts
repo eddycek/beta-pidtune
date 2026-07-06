@@ -587,6 +587,39 @@ describe('recommendRCLinkBaseline', () => {
     expect(rcRec).toBeUndefined();
   });
 
+  it('should skip the FF-RC-SMOOTH advisory for aggressive style (racing runs 20-30)', () => {
+    // Same context that fires for balanced/smooth — BF 4.3 Tuning Notes put
+    // racing at auto factor 20-30, so pushing a racer to 45 would add latency.
+    const ctx: FeedforwardContext = {
+      active: true,
+      boost: 15,
+      averaging: 0,
+      smoothFactor: 15,
+      jitterFactor: 10,
+      rcLinkRateHz: 200,
+      rcSmoothingAutoFactor: 30,
+    };
+    const recs = recommendRCLinkBaseline(ctx, 'aggressive');
+    const rcRec = recs.find((r) => r.setting === 'rc_smoothing_auto_factor');
+    expect(rcRec).toBeUndefined();
+  });
+
+  it('should still emit FF-RC-SMOOTH for balanced style (explicit flightStyle param)', () => {
+    const ctx: FeedforwardContext = {
+      active: true,
+      boost: 15,
+      averaging: 0,
+      smoothFactor: 15,
+      jitterFactor: 10,
+      rcLinkRateHz: 200,
+      rcSmoothingAutoFactor: 30,
+    };
+    const recs = recommendRCLinkBaseline(ctx, 'balanced');
+    const rcRec = recs.find((r) => r.setting === 'rc_smoothing_auto_factor');
+    expect(rcRec).toBeDefined();
+    expect(rcRec!.ruleId).toBe('FF-RC-SMOOTH');
+  });
+
   it('should not recommend rc_smoothing_auto_factor for low RC rate', () => {
     const ctx: FeedforwardContext = {
       active: true,

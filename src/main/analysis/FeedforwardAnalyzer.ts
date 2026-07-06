@@ -16,6 +16,7 @@ import type {
   StepResponse,
   PIDRecommendation,
 } from '@shared/types/analysis.types';
+import type { FlightStyle } from '@shared/types/profile.types';
 import {
   lookupRCLinkProfile,
   RC_SMOOTHING_AUTO_FACTOR_DEFAULT,
@@ -176,7 +177,8 @@ function isSignificantDeviation(
  * @returns Array of PID recommendations for RC-link-aware FF baseline
  */
 export function recommendRCLinkBaseline(
-  ffContext: FeedforwardContext | undefined
+  ffContext: FeedforwardContext | undefined,
+  flightStyle?: FlightStyle
 ): PIDRecommendation[] {
   if (!ffContext?.active) return [];
 
@@ -244,9 +246,12 @@ export function recommendRCLinkBaseline(
     });
   }
 
-  // rc_smoothing_auto_factor advisory — recommend when below optimal for high-rate links
+  // rc_smoothing_auto_factor advisory — recommend when below optimal for high-rate links.
+  // Skipped for aggressive style: BF 4.3 Tuning Notes put racing at 20-30, and the
+  // default 30 is already correct there — pushing a racer to 45 would add latency.
   const currentAutoFactor = ffContext.rcSmoothingAutoFactor;
   if (
+    flightStyle !== 'aggressive' &&
     currentAutoFactor !== undefined &&
     currentAutoFactor < RC_SMOOTHING_AUTO_FACTOR_RECOMMENDED &&
     ffContext.rcLinkRateHz !== undefined &&

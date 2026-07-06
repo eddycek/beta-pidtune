@@ -3,12 +3,16 @@
 ## CI/CD Pipeline
 
 ```
-PR opened/updated (infrastructure/** changed)
+PR opened/updated (trigger paths: infrastructure/terraform/**,
+infrastructure/telemetry-worker/src/**, infrastructure/license-worker/src/**,
+.github/workflows/infrastructure.yml)
   └─ build telemetry worker → deploy dev → plan prod
 
-Merge to main
+Merge to main (same trigger paths)
   └─ build telemetry worker → deploy dev → deploy prod
 ```
+
+Note: changes outside these paths (e.g. `infrastructure/*.md`, `infrastructure/scripts/`) do **not** trigger the pipeline.
 
 - **`build-worker`**: `esbuild` compiles telemetry worker TypeScript source into bundle
 - **`deploy-dev`** (PR + main): `terraform apply` to dev — immediate feedback on PRs (skips fork PRs)
@@ -141,13 +145,21 @@ export TF_VAR_admin_key="$TELEMETRY_ADMIN_KEY_DEV"
 export TF_VAR_license_admin_key="$LICENSE_ADMIN_KEY_DEV"
 terraform apply -var-file=dev.tfvars
 
-# 2b. Deploy license worker via wrangler (not terraform)
-cd ../license-worker && npm install && npx wrangler deploy && cd ../terraform
+# 2b. Deploy license worker via wrangler (not terraform) + apply D1 migrations
+cd ../license-worker && npm install && npx wrangler deploy
+npx wrangler d1 execute pidlab-license-dev --file=src/schema.sql --remote
+npx wrangler d1 execute pidlab-license-dev --file=src/migration-beta.sql --remote || echo "Migration already applied"
+cd ../terraform
 
 # 2c. Deploy PROD
 terraform init -reconfigure -backend-config=backend-prod.hcl
 export TF_VAR_admin_key="$TELEMETRY_ADMIN_KEY_PROD"
 export TF_VAR_license_admin_key="$LICENSE_ADMIN_KEY_PROD"
 terraform apply -var-file=prod.tfvars
-cd ../license-worker && npx wrangler deploy --env prod && cd ../terraform
+cd ../license-worker && npx wrangler deploy --env prod
+npx wrangler d1 execute pidlab-license --env prod --file=src/schema.sql --remote
+npx wrangler d1 execute pidlab-license --env prod --file=src/migration-beta.sql --remote || echo "Migration already applied"
+cd ../terraform
 ```
+
+The D1 migration steps mirror CI (`.github/workflows/infrastructure.yml` — "Deploy license worker + D1 migrations"): `schema.sql` is idempotent (CREATE TABLE IF NOT EXISTS), `migration-beta.sql` is allowed to fail when already applied.

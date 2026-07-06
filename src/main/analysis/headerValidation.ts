@@ -49,13 +49,15 @@ function isGyroScaledRemoved(firmwareVersion: string): boolean {
 export function validateBBLHeader(header: BBLLogHeader): AnalysisWarning[] {
   const warnings: AnalysisWarning[] = [];
 
-  // Check logging rate — looptime is gyro loop period in microseconds.
-  // This gives the gyro sampling rate, not the actual blackbox log rate
-  // (which also depends on pid_process_denom and blackbox_sample_rate).
-  // The MIN_LOGGING_RATE_HZ threshold is intentionally lenient to only
-  // flag severely undersampled logs where Nyquist is below motor noise.
+  // Check logging rate — the EFFECTIVE blackbox log rate, not the gyro rate.
+  // looptime is the gyro loop period (µs); the log rate is further divided by
+  // pid_process_denom and the blackbox P interval, exactly as BlackboxParser
+  // computes its sampleRateHz. Using the bare gyro rate here overestimated the
+  // rate by pDenom·pInterval (8× on typical 8k/2/4 configs) and the warning
+  // never fired on genuinely undersampled 1 kHz logs.
   if (header.looptime > 0) {
-    const loggingRateHz = 1_000_000 / header.looptime;
+    const pDiv = Math.max(1, header.pInterval || 1) * Math.max(1, header.pDenom || 1);
+    const loggingRateHz = 1_000_000 / (header.looptime * pDiv);
     if (loggingRateHz < MIN_LOGGING_RATE_HZ) {
       const nyquist = Math.round(loggingRateHz / 2);
       warnings.push({
@@ -110,6 +112,31 @@ export function enrichSettingsFromBBLHeaders(
 ): CurrentFilterSettings | null {
   const enriched: CurrentFilterSettings = { ...settings };
   let changed = false;
+
+  // Static cutoffs + dynamic notch range: the BBL header is the PRIMARY source
+  // (flight-time config) and always wins when present. Without this, a
+  // disconnected-FC analysis silently ran against DEFAULT_FILTER_SETTINGS
+  // (e.g. gyro LPF1 250 Hz) instead of the flight's real values (e.g. 500 Hz),
+  // because the defaults pre-populate these fields and the undefined-guard
+  // below never fired for them.
+  const bblPrimaryFields = [
+    'gyro_lpf1_static_hz',
+    'gyro_lpf2_static_hz',
+    'dterm_lpf1_static_hz',
+    'dterm_lpf2_static_hz',
+    'dyn_notch_min_hz',
+    'dyn_notch_max_hz',
+  ] as const;
+  for (const field of bblPrimaryFields) {
+    const raw = rawHeaders.get(field);
+    if (raw !== undefined) {
+      const value = parseInt(raw, 10);
+      if (!isNaN(value) && (enriched as any)[field] !== value) {
+        (enriched as any)[field] = value;
+        changed = true;
+      }
+    }
+  }
 
   if (enriched.rpm_filter_harmonics === undefined) {
     const harmonicsStr = rawHeaders.get('rpm_filter_harmonics');
