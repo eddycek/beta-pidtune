@@ -51,10 +51,10 @@ All endpoints use JSON request/response bodies unless noted.
 | `GET` | `/admin/stats/blackbox` | `X-Admin-Key` | Blackbox: total logs, compression, storage types |
 | `GET` | `/admin/stats/profiles` | `X-Admin-Key` | Profile count distribution + average per install |
 | `GET` | `/admin/stats/full` | `X-Admin-Key` | All of the above in a single response |
-| `GET` | `/admin/stats/rules` | `X-Admin-Key` | Rule effectiveness: fire/apply rates, avg delta (v3) |
-| `GET` | `/admin/stats/metrics` | `X-Admin-Key` | Metric distributions: noise, overshoot, bandwidth (v3) |
-| `GET` | `/admin/stats/verification` | `X-Admin-Key` | Verification success rates by tuning mode (v3) |
-| `GET` | `/admin/stats/convergence` | `X-Admin-Key` | Quality score convergence across sessions (v3) |
+| `GET` | `/admin/stats/rules` | `X-Admin-Key` | Rule effectiveness: fire/apply rates, avg delta (v2) |
+| `GET` | `/admin/stats/metrics` | `X-Admin-Key` | Metric distributions: noise, overshoot, bandwidth (v2) |
+| `GET` | `/admin/stats/verification` | `X-Admin-Key` | Verification success rates by tuning mode (v2) |
+| `GET` | `/admin/stats/convergence` | `X-Admin-Key` | Quality score convergence across sessions (v2) |
 | `GET` | `/admin/stats/errors` | `X-Admin-Key` | Aggregated error metrics from structured events (v3) |
 | `GET` | `/admin/events` | `X-Admin-Key` | Events for specific installation (`?id=UUID`) |
 
@@ -80,7 +80,7 @@ All endpoints use JSON request/response bodies unless noted.
 | `GET` | `/beta` | None | Public beta signup form (HTML page) |
 | `POST` | `/beta/signup` | None | Process signup submission (email, drone info, experience) |
 | `GET` | `/beta/thankyou` | None | Confirmation page after signup |
-| `GET` | `/admin/beta` | `X-Admin-Key` | Admin dashboard — review pending beta applications (HTML) |
+| `GET` | `/admin/beta` | None | Admin dashboard HTML shell (public page — data endpoints below require auth) |
 | `GET` | `/admin/beta/list` | `X-Admin-Key` | List beta applications (JSON, `?status=pending\|approved\|rejected`) |
 | `PUT` | `/admin/beta/{id}/approve` | `X-Admin-Key` | Approve application — auto-generates tester license key + sends email |
 | `PUT` | `/admin/beta/{id}/reject` | `X-Admin-Key` | Reject application — sends rejection email |

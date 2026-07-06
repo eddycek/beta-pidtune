@@ -20,6 +20,7 @@ Overview of all design documents in this directory. Completed documents are arch
 | [CONFIG_HEALTH_CHECK](./CONFIG_HEALTH_CHECK.md) | **Proposed** | Read-only FC config audit — safety, motor/ESC, RC link, power, size-specific. ~20 rules across 5 categories, health score. Excludes PID/filter/blackbox (covered by tuning modes) |
 | [PAYMENT_AND_INVOICING](./PAYMENT_AND_INVOICING.md) | **Proposed** | Stripe payment gateway + Trivi API invoicing. End-to-end purchase → invoice → license delivery flow |
 | [LICENSE_KEY_SYSTEM](./LICENSE_KEY_SYSTEM.md) | **Active** | Freemium licensing via CF Workers + D1. Ed25519 keys, offline grace period, admin API |
+| [PRO_VERSION_STRATEGY](./PRO_VERSION_STRATEGY.md) | **Proposed** | Pro version strategy & 10-year financial plan — pricing, feature split, revenue projections |
 | [CODE_SIGNING_AND_UPDATES](./CODE_SIGNING_AND_UPDATES.md) | **Active** | macOS/Windows code signing, electron-updater auto-update, GitHub Releases provider |
 
 ## Completed Documents (`complete/`)
@@ -47,7 +48,7 @@ Overview of all design documents in this directory. Completed documents are arch
 | [DIAGNOSTIC_REPORTS](./complete/DIAGNOSTIC_REPORTS.md) | Diagnostic report bundles for support investigation. Pro-only, gzipped upload to CF Worker + optional BBL flight data upload (PRs #310–#338) |
 | [TUNING_PRECISION_IMPROVEMENTS](./complete/TUNING_PRECISION_IMPROVEMENTS.md) | 14 research-based tuning accuracy improvements — all implemented (Wiener deconvolution, proportional PID scaling, data quality scoring, throttle spectrograms, etc.). Chirp analysis extracted to standalone doc |
 | [VERIFICATION_FLIGHT_SIMILARITY](./complete/VERIFICATION_FLIGHT_SIMILARITY.md) | Verification flight similarity matching & tuning loop prevention. 4-layer architecture: flight similarity matcher, recommendation hysteresis, convergence detection, iteration tracking (PRs #411–#415) |
-| [FC_STATE_CACHE](./FC_STATE_CACHE.md) | Centralized FC data cache + event push. Eliminates race conditions from independent MSP reads, simplifies renderer state (~15 vars removed from App.tsx), fixes stale BB status/PID profile/erase step bugs (PR #428) |
+| [FC_STATE_CACHE](./FC_STATE_CACHE.md) | Centralized FC data cache + event push. Eliminates race conditions from independent MSP reads, simplifies renderer state (~15 vars removed from App.tsx), fixes stale BB status/PID profile/erase step bugs (PR #428). *Status Complete but not yet archived — file lives at `docs/FC_STATE_CACHE.md`, not `complete/`* |
 
 ## Status Legend
 

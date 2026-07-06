@@ -70,13 +70,16 @@ infrastructure/
 │   └── src/
 │       ├── index.ts               ← Router + CORS
 │       ├── types.ts               ← Env bindings, D1 row types
-│       ├── admin.ts               ← 6 admin endpoints (generate, list, get, revoke, reset, stats)
+│       ├── admin.ts               ← 10 admin routes (keys: generate, list, get, revoke, reset, stats; beta: dashboard, list, approve, reject)
 │       ├── license.ts             ← Public endpoints (activate, validate, self-reset)
-│       ├── beta.ts                ← Beta program: signup form, admin dashboard, approve/reject
+│       ├── beta.ts                ← Beta program: signup form handling, approve/reject logic
+│       ├── betaPages.ts           ← Beta HTML pages (signup form, thank-you, admin dashboard shell)
+│       ├── email.ts               ← Beta program emails via Resend (approval, rejection)
 │       ├── crypto.ts              ← Ed25519 sign/verify via WebCrypto
 │       ├── keygen.ts              ← FPVPIDLAB-XXXX-XXXX-XXXX key generation
 │       ├── validation.ts          ← Input validation
-│       └── schema.sql             ← D1 database schema
+│       ├── schema.sql             ← D1 database schema
+│       └── migration-beta.sql     ← D1 migration: beta whitelist column (idempotent in CI)
 ├── scripts/                       ← Admin CLI tools (auto-source .env.local)
 │   ├── _env.sh                    ← Shared env loader
 │   ├── generate-ed25519-keypair.sh ← Generate license signing keypair
@@ -99,6 +102,8 @@ infrastructure/
 │   ├── telemetry-metrics.sh       ← Metric distributions (v2)
 │   ├── telemetry-verification.sh  ← Verification success rates (v2)
 │   ├── telemetry-convergence.sh   ← Quality score convergence (v2)
+│   ├── telemetry-errors.sh        ← Error breakdown from structured events (v3)
+│   ├── telemetry-events.sh        ← Raw structured events by installation (v3)
 │   ├── diagnostic-list.sh         ← List diagnostic reports
 │   ├── diagnostic-review.sh       ← Mark report as reviewing
 │   ├── diagnostic-resolve.sh      ← Resolve report with message

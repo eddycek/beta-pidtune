@@ -1,5 +1,7 @@
 # UX Improvement Ideas
 
+> **Status**: Active
+
 Collected ideas for improving the tuning workflow UX. Roughly prioritized by impact.
 
 ## ~~1. Pre-Flight Blackbox Settings Check~~ :white_check_mark: Done

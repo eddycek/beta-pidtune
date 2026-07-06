@@ -66,7 +66,7 @@ All main ↔ renderer communication goes through `window.betaflight` API defined
 ```bash
 npm run dev:demo
 ```
-Auto-connects to a virtual FC, creates a demo profile, and generates realistic blackbox data. The full tuning workflow is functional (real FFT/step analysis). See [docs/OFFLINE_UX_TESTING.md](./docs/OFFLINE_UX_TESTING.md).
+Auto-connects to a virtual FC, creates a demo profile, and generates realistic blackbox data. The full tuning workflow is functional (real FFT/step analysis). See [docs/complete/OFFLINE_UX_TESTING.md](./docs/complete/OFFLINE_UX_TESTING.md).
 
 **Without demo mode**, the app runs with no FC connected:
 - Port scanning shows empty list

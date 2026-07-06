@@ -69,8 +69,9 @@ PIDLAB_ENV=prod ./infrastructure/scripts/generate-key.sh
 # Mark report as reviewing
 ./infrastructure/scripts/diagnostic-review.sh <reportId>
 
-# Resolve report with message (sends email to user if they provided email)
-./infrastructure/scripts/diagnostic-resolve.sh <reportId> "Fixed in v0.2.0 — LPF1 threshold adjusted"
+# Resolve report (resolution required: fixed | user-error | known-limitation | wontfix;
+# optional message sends email to user if they provided one)
+./infrastructure/scripts/diagnostic-resolve.sh <reportId> fixed "Fixed in v0.2.0 — LPF1 threshold adjusted"
 
 # Add internal note (not visible to user)
 ./infrastructure/scripts/diagnostic-note.sh <reportId> "Reproducible with RPM filter disabled"

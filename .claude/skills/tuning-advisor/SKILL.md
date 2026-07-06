@@ -138,10 +138,10 @@ For each filter rule, verify:
 - [ ] RPM-conditional bounds (`*_MAX_HZ_RPM`) are appropriate per community presets
 - [ ] Size-aware noise classification (`NOISE_LEVEL_BY_SIZE`) matches PIDToolBox -30 dB standard for 5"
 - [ ] Dynamic lowpass ratio is 2:1 (`DYNAMIC_LOWPASS_RATIO`) per BF simplified tuning formula
-- [ ] Dynamic lowpass multipliers per size (`DYNAMIC_LOWPASS_BY_SIZE`) match SupaflyFPV/UAV Tech presets
+- [ ] Dynamic lowpass enable/disable thresholds (≥6 dB + Pearson ≥0.6 enable, <4 dB disable — `DYNAMIC_LOWPASS_DISABLE_DB` hysteresis) are consistent; enable uses dyn_min = static, dyn_max = static × 2 (note: `DYNAMIC_LOWPASS_BY_SIZE` was removed as dead code — current SupaflyFPV presets disable gyro LPF1 entirely with RPM filtering)
 - [ ] Dynamic notch count/Q with RPM (`DYN_NOTCH_COUNT_WITH_RPM_BY_SIZE`, `DYN_NOTCH_Q_WITH_RPM`) match community
 - [ ] Resonance action threshold (`RESONANCE_ACTION_THRESHOLD_DB`) is appropriate
-- [ ] Propwash gyro LPF1 floor (`PROPWASH_GYRO_LPF1_FLOOR_HZ = 100`) matches BF wiki "avoid below 100 Hz"
+- [ ] Propwash gyro LPF1 floor (`PROPWASH_GYRO_LPF1_FLOOR_HZ = 100`) — conservative house rule (BF's "avoid below 100 Hz" refers to notch filters; community D-term floor is ~80 Hz)
 - [ ] LPF2 disable/enable thresholds (`*_LPF2_DISABLE_THRESHOLD_DB`) are sensible
 - [ ] RPM filter Q per size (`RPM_FILTER_Q_BY_SIZE`) matches SupaflyFPV/UAV Tech presets
 - [ ] D-term dynamic expo per style (`DTERM_DYN_EXPO_BY_STYLE`) matches Karate Race presets
@@ -152,7 +152,7 @@ For each filter rule, verify:
 #### B. PID Rules (all 25+ rule IDs)
 For each PID rule, verify:
 - [ ] P/D/I safety bounds (`QUAD_SIZE_BOUNDS` per size) prevent dangerous values
-- [ ] D/P damping ratio range (0.45-0.85) matches community consensus (Bardwell, FPVSIM)
+- [ ] D/P damping ratio range (0.45-0.85; ceiling 1.0 for 1"/2.5" via `DAMPING_RATIO_MAX_MICRO` — whoop presets run 0.9-0.95) matches community consensus (Bardwell, FPVSIM)
 - [ ] Overshoot/settling/ringing thresholds per flight style (`PID_STYLE_THRESHOLDS`) are appropriate
 - [ ] Severity-scaled step sizes (P: +5/+10/+15, D: +5/+10/+15) are convergent (not oscillating)
 - [ ] I-term steady-state error thresholds match community (3-5% balanced, 8% smooth, 3% aggressive)
@@ -164,10 +164,10 @@ For each PID rule, verify:
 - [ ] I-term relax cutoff per flight style (`ITERM_RELAX_CUTOFF_BY_STYLE`) matches community (30-40 race, 10-15 freestyle, 5-7 heavy)
 - [ ] TPA per size (`TPA_BY_SIZE`) matches SupaflyFPV/UAV Tech presets
 - [ ] TPA interaction with propwash (breakpoint >= 1300, D-only mode) is enforced
-- [ ] Anti-gravity gain thresholds match community presets
+- [ ] Anti-gravity gain thresholds match community presets (110/120 only for 7-9" heavy craft; 5" presets keep default 80 — weight gate `ANTI_GRAVITY_WEIGHT_THRESHOLD_G = 700`)
 - [ ] Thrust linearization per size matches SupaflyFPV presets
 - [ ] Dynamic idle min RPM per size (`DYN_IDLE_MIN_RPM_BY_SIZE`) matches community
-- [ ] PID sum limits match UAV Tech/Karate Race recommendations
+- [ ] PID sum limits match UAV Tech/Karate Race recommendations — recommendation must be informational-only (`informational: true`), and the >800 g weight gate is an FPVPIDlab house rule (UAV Tech applies 1000 universally regardless of weight)
 - [ ] FF max rate limit (90 default, 100 race) matches community
 - [ ] RC link-aware FF profiles (`RC_LINK_PROFILES`) match SupaflyFPV/Karate/UAV Tech presets
 - [ ] RC smoothing auto factor advisory is correct
