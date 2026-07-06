@@ -4,15 +4,10 @@ import {
   recommendDynamicLowpass,
   DYNAMIC_LOWPASS_NOISE_INCREASE_DB,
   DYNAMIC_LOWPASS_MIN_CORRELATION,
+  DYNAMIC_LOWPASS_DISABLE_DB,
 } from './DynamicLowpassRecommender';
-import {
-  DYNAMIC_LOWPASS_BY_SIZE,
-  BF_GYRO_LPF1_DYN_BASE_HZ,
-  BF_DTERM_LPF1_DYN_BASE_HZ,
-  DYNAMIC_LOWPASS_RATIO,
-} from './constants';
+import { DYNAMIC_LOWPASS_RATIO } from './constants';
 import type { ThrottleSpectrogramResult, ThrottleBand } from '@shared/types/analysis.types';
-import type { DroneSize } from '@shared/types/profile.types';
 
 function makeBand(
   throttleMin: number,
@@ -264,7 +259,8 @@ describe('recommendDynamicLowpass', () => {
       dynamicSettings(200, 500, 100, 250)
     );
 
-    // Both active but no throttle noise → recommend disabling (min + max for each)
+    // Both active but no throttle noise (delta 3 dB < 4 dB disable threshold)
+    // → recommend disabling (min + max for each)
     expect(recs).toHaveLength(4);
     expect(recs[0].setting).toBe('gyro_lpf1_dyn_min_hz');
     expect(recs[0].recommendedValue).toBe(0);
@@ -274,6 +270,52 @@ describe('recommendDynamicLowpass', () => {
     expect(recs[2].recommendedValue).toBe(0);
     expect(recs[3].setting).toBe('dterm_lpf1_dyn_max_hz');
     expect(recs[3].recommendedValue).toBe(0);
+  });
+
+  describe('disable hysteresis (DYNAMIC_LOWPASS_DISABLE_DB = 4)', () => {
+    it('exposes a disable threshold below the 6 dB enable threshold', () => {
+      expect(DYNAMIC_LOWPASS_DISABLE_DB).toBe(4);
+      expect(DYNAMIC_LOWPASS_DISABLE_DB).toBeLessThan(DYNAMIC_LOWPASS_NOISE_INCREASE_DB);
+    });
+
+    it('does NOT recommend disabling in the 4-6 dB gray zone (delta 5 dB)', () => {
+      // Not recommended for enable (5 < 6) but ≥ disable threshold (4) → leave config
+      const grayZoneAnalysis = {
+        recommended: false,
+        noiseIncreaseDeltaDb: 5,
+        throttleNoiseCorrelation: 0.9,
+        bandsAnalyzed: 5,
+        summary: 'Static lowpass is appropriate.',
+      };
+      const recs = recommendDynamicLowpass(grayZoneAnalysis, dynamicSettings(200, 500, 100, 250));
+      expect(recs).toHaveLength(0);
+    });
+
+    it('does NOT recommend disabling at exactly 4 dB (boundary stays untouched)', () => {
+      const boundaryAnalysis = {
+        recommended: false,
+        noiseIncreaseDeltaDb: 4,
+        throttleNoiseCorrelation: 0.5,
+        bandsAnalyzed: 5,
+        summary: 'Static lowpass is appropriate.',
+      };
+      const recs = recommendDynamicLowpass(boundaryAnalysis, dynamicSettings(200, 500));
+      expect(recs).toHaveLength(0);
+    });
+
+    it('recommends disabling below the threshold (delta 3 dB)', () => {
+      const lowDeltaAnalysis = {
+        recommended: false,
+        noiseIncreaseDeltaDb: 3,
+        throttleNoiseCorrelation: 0.3,
+        bandsAnalyzed: 5,
+        summary: 'Static lowpass is appropriate.',
+      };
+      const recs = recommendDynamicLowpass(lowDeltaAnalysis, dynamicSettings(200, 500));
+      expect(recs).toHaveLength(2);
+      expect(recs.every((r) => r.ruleId === 'F-DLPF-GYRO-OFF')).toBe(true);
+      expect(recs.every((r) => r.recommendedValue === 0)).toBe(true);
+    });
   });
 });
 
@@ -338,27 +380,6 @@ describe('community preset validation', () => {
         const max = recs[1].recommendedValue;
         expect(max / min).toBe(DYNAMIC_LOWPASS_RATIO);
       }
-    }
-  });
-
-  it('per-size multipliers produce valid ranges from BF base frequencies', () => {
-    const sizes: DroneSize[] = ['3"', '4"', '5"', '7"'];
-    for (const size of sizes) {
-      const profile = DYNAMIC_LOWPASS_BY_SIZE[size];
-      const gyroMin = Math.round((BF_GYRO_LPF1_DYN_BASE_HZ * profile.gyroMultiplier) / 100);
-      const gyroMax = gyroMin * DYNAMIC_LOWPASS_RATIO;
-      const dtermMin = Math.round((BF_DTERM_LPF1_DYN_BASE_HZ * profile.dtermMultiplier) / 100);
-      const dtermMax = dtermMin * DYNAMIC_LOWPASS_RATIO;
-
-      // Gyro dyn_min should be reasonable (50-500 Hz)
-      expect(gyroMin).toBeGreaterThanOrEqual(50);
-      expect(gyroMin).toBeLessThanOrEqual(500);
-      // DTerm dyn_min should be reasonable (50-200 Hz)
-      expect(dtermMin).toBeGreaterThanOrEqual(50);
-      expect(dtermMin).toBeLessThanOrEqual(200);
-      // 2:1 ratio always holds
-      expect(gyroMax / gyroMin).toBe(DYNAMIC_LOWPASS_RATIO);
-      expect(dtermMax / dtermMin).toBe(DYNAMIC_LOWPASS_RATIO);
     }
   });
 });

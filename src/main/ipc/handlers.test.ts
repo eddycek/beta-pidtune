@@ -1265,6 +1265,197 @@ describe('IPC Handlers', () => {
       expect(result.error).toContain('pid_roll_p');
     });
 
+    it('accepts pid_roll_d = 100 (cross-size envelope allows 7" dMax)', async () => {
+      // Regression: the gate used to hardcode the 5" dMax=80, aborting the whole
+      // apply for legal 6"/7" D recommendations (81-100).
+      const input = {
+        ...baseInput,
+        pidRecommendations: [
+          {
+            setting: 'pid_roll_d',
+            currentValue: 95,
+            recommendedValue: 100, // 7" dMax — must pass the envelope gate
+            reason: '',
+            impact: 'response' as const,
+            confidence: 'high' as const,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(true);
+      expect(res.data.appliedPIDs).toBe(1);
+    });
+
+    it('rejects pid_roll_d above the cross-size envelope (101+)', async () => {
+      const input = {
+        ...baseInput,
+        pidRecommendations: [
+          {
+            setting: 'pid_roll_d',
+            currentValue: 95,
+            recommendedValue: 130, // Above 7" dMax=100 envelope
+            reason: '',
+            impact: 'response' as const,
+            confidence: 'high' as const,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('PID validation failed');
+      expect(res.error).toContain('pid_roll_d');
+    });
+
+    it('never applies informational recommendations (P-PIDLIM, P-HI-P, …)', async () => {
+      // Informational recs are advisory-only. Even if a client forgets to filter
+      // them (the wizard used to), the handler must drop them — an unfiltered
+      // pidsum_limit_yaw 400→1000 jump was silently auto-applied before this guard.
+      const input = {
+        filterRecommendations: [],
+        pidRecommendations: [
+          {
+            setting: 'pid_roll_p',
+            currentValue: 45,
+            recommendedValue: 45,
+            reason: 'P higher than typical',
+            impact: 'both' as const,
+            confidence: 'low' as const,
+            informational: true,
+          },
+        ],
+        feedforwardRecommendations: [
+          {
+            setting: 'pidsum_limit_yaw',
+            currentValue: 400,
+            recommendedValue: 1000,
+            reason: 'heavy build',
+            impact: 'response' as const,
+            confidence: 'low' as const,
+            informational: true,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+
+      // All-informational input → zero-change success, nothing written, no reboot
+      expect(res.success).toBe(true);
+      expect(res.data.appliedPIDs).toBe(0);
+      expect(res.data.appliedFeedforward).toBe(0);
+      expect(res.data.rebooted).toBe(false);
+      expect(mockMSP.setPIDConfiguration).not.toHaveBeenCalled();
+      expect(mockMSP.connection.sendCLICommand).not.toHaveBeenCalled();
+    });
+
+    it('applies actionable recs while dropping informational ones from the same batch', async () => {
+      const input = {
+        ...baseInput,
+        feedforwardRecommendations: [
+          {
+            setting: 'pidsum_limit',
+            currentValue: 500,
+            recommendedValue: 1000,
+            reason: 'heavy build',
+            impact: 'response' as const,
+            confidence: 'low' as const,
+            informational: true,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+
+      expect(res.success).toBe(true);
+      expect(res.data.appliedPIDs).toBe(1);
+      expect(res.data.appliedFeedforward).toBe(0);
+      const cliCalls = mockMSP.connection.sendCLICommand.mock.calls.map((c: any[]) => c[0]);
+      expect(cliCalls.some((cmd: string) => cmd.includes('pidsum_limit'))).toBe(false);
+    });
+
+    it('rejects d_min_gain above firmware max (100)', async () => {
+      const input = {
+        ...baseInput,
+        pidRecommendations: [],
+        feedforwardRecommendations: [
+          {
+            setting: 'd_min_gain',
+            currentValue: 37,
+            recommendedValue: 150, // Firmware range is 0-100
+            reason: '',
+            impact: 'stability' as const,
+            confidence: 'medium' as const,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Feedforward validation failed');
+      expect(res.error).toContain('d_min_gain');
+    });
+
+    it('rejects tpa_rate above firmware max (100)', async () => {
+      const input = {
+        ...baseInput,
+        pidRecommendations: [],
+        feedforwardRecommendations: [
+          {
+            setting: 'tpa_rate',
+            currentValue: 65,
+            recommendedValue: 120, // Firmware range is 0-100
+            reason: '',
+            impact: 'stability' as const,
+            confidence: 'medium' as const,
+          },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Feedforward validation failed');
+      expect(res.error).toContain('tpa_rate');
+    });
+
+    it('accepts new firmware-exact FF gates at their maxima', async () => {
+      const input = {
+        ...baseInput,
+        pidRecommendations: [],
+        feedforwardRecommendations: [
+          { setting: 'feedforward_smooth_factor', currentValue: 25, recommendedValue: 75 },
+          { setting: 'feedforward_jitter_factor', currentValue: 7, recommendedValue: 20 },
+          { setting: 'feedforward_averaging', currentValue: 0, recommendedValue: 4 },
+        ],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(true);
+      expect(res.data.appliedFeedforward).toBe(3);
+    });
+
+    it('rejects dyn_notch_min_hz outside firmware range (20-250)', async () => {
+      const input = {
+        ...baseInput,
+        filterRecommendations: [
+          {
+            setting: 'dyn_notch_min_hz',
+            currentValue: 100,
+            recommendedValue: 300, // Firmware max is 250
+            reason: '',
+            impact: 'noise' as const,
+            confidence: 'medium' as const,
+          },
+        ],
+        pidRecommendations: [],
+      };
+      const { event } = createMockEvent();
+      const res = await invokeWithEvent(IPCChannel.TUNING_APPLY_RECOMMENDATIONS, event, input);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Filter validation failed');
+      expect(res.error).toContain('dyn_notch_min_hz');
+    });
+
     it('clamps PID values within bounds to integer range 0-255', async () => {
       const input = {
         ...baseInput,

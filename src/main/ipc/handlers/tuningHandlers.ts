@@ -15,7 +15,7 @@ import {
   TransferFunctionMetricsSummary,
 } from '@shared/types/tuning-history.types';
 import { PIDConfiguration } from '@shared/types/pid.types';
-import { DEFAULT_QUAD_SIZE_BOUNDS } from '../../analysis/constants';
+import { QUAD_SIZE_BOUNDS } from '../../analysis/constants';
 import { HandlerDependencies, createResponse } from './types';
 import { sendTuningSessionChanged, sendProfileChanged } from './events';
 import { getMainWindow } from '../../window';
@@ -127,10 +127,27 @@ async function computeConvergenceAndIteration(
 }
 
 /**
+ * PID gate bounds = envelope across ALL sizes in QUAD_SIZE_BOUNDS.
+ * The recommender already clamps per-size; the gate must accept every value
+ * a size-aware recommender can legally produce (e.g. 7" dMax=100), while
+ * still catching truly dangerous values.
+ */
+const ALL_SIZE_BOUNDS = Object.values(QUAD_SIZE_BOUNDS);
+const PID_GATE = {
+  pMin: Math.min(...ALL_SIZE_BOUNDS.map((b) => b.pMin)),
+  pMax: Math.max(...ALL_SIZE_BOUNDS.map((b) => b.pMax)),
+  dMin: Math.min(...ALL_SIZE_BOUNDS.map((b) => b.dMin)),
+  dMax: Math.max(...ALL_SIZE_BOUNDS.map((b) => b.dMax)),
+  iMin: Math.min(...ALL_SIZE_BOUNDS.map((b) => b.iMin)),
+  iMax: Math.max(...ALL_SIZE_BOUNDS.map((b) => b.iMax)),
+};
+
+/**
  * Pre-apply validation ranges for recommended values.
- * Filter/FF entries use Betaflight firmware limits (0-1000 Hz, etc.).
- * PID entries use safety bounds from QUAD_SIZE_BOUNDS (tighter than BF's 0-255)
- * to catch recommender bugs before they reach the FC.
+ * Filter/FF entries use Betaflight firmware limits (settings.c ranges) so the
+ * gate never passes a value the FC would reject.
+ * PID entries use the cross-size envelope of QUAD_SIZE_BOUNDS (tighter than
+ * BF's 0-255) to catch recommender bugs before they reach the FC.
  */
 const BF_SETTING_RANGES: Record<string, { min: number; max: number }> = {
   gyro_lpf1_static_hz: { min: 0, max: 1000 },
@@ -142,14 +159,17 @@ const BF_SETTING_RANGES: Record<string, { min: number; max: number }> = {
   dterm_lpf1_dyn_max_hz: { min: 0, max: 1000 },
   dterm_lpf2_static_hz: { min: 0, max: 1000 },
   dterm_lpf1_dyn_expo: { min: 0, max: 10 },
-  dyn_notch_min_hz: { min: 20, max: 1000 },
-  dyn_notch_max_hz: { min: 20, max: 1000 },
+  dyn_notch_min_hz: { min: 20, max: 250 },
+  dyn_notch_max_hz: { min: 200, max: 1000 },
   dyn_notch_count: { min: 0, max: 5 },
   dyn_notch_q: { min: 1, max: 1000 },
   rpm_filter_q: { min: 1, max: 1000 },
   feedforward_boost: { min: 0, max: 50 },
-  d_min_gain: { min: 0, max: 250 },
-  simplified_dmax_gain: { min: 0, max: 250 },
+  feedforward_smooth_factor: { min: 0, max: 75 },
+  feedforward_jitter_factor: { min: 0, max: 20 },
+  feedforward_averaging: { min: 0, max: 4 },
+  d_min_gain: { min: 0, max: 100 },
+  simplified_dmax_gain: { min: 0, max: 200 },
   iterm_relax: { min: 0, max: 2 },
   iterm_relax_cutoff: { min: 1, max: 100 },
   dyn_idle_min_rpm: { min: 0, max: 200 },
@@ -158,23 +178,21 @@ const BF_SETTING_RANGES: Record<string, { min: number; max: number }> = {
   feedforward_max_rate_limit: { min: 0, max: 150 },
   anti_gravity_gain: { min: 0, max: 250 },
   thrust_linear: { min: 0, max: 150 },
-  tpa_rate: { min: 0, max: 250 },
+  tpa_rate: { min: 0, max: 100 },
   tpa_breakpoint: { min: 1000, max: 2000 },
   tpa_low_always: { min: 0, max: 1 },
   tpa_mode: { min: 0, max: 1 },
   rc_smoothing_auto_factor: { min: 1, max: 250 },
   vbat_sag_compensation: { min: 0, max: 150 },
-  // PID bounds — uses default (5") safety bounds as defense-in-depth.
-  // Per-size bounds are enforced in the recommender; these catch truly dangerous values.
-  pid_roll_p: { min: DEFAULT_QUAD_SIZE_BOUNDS.pMin, max: DEFAULT_QUAD_SIZE_BOUNDS.pMax },
-  pid_roll_i: { min: DEFAULT_QUAD_SIZE_BOUNDS.iMin, max: DEFAULT_QUAD_SIZE_BOUNDS.iMax },
-  pid_roll_d: { min: DEFAULT_QUAD_SIZE_BOUNDS.dMin, max: DEFAULT_QUAD_SIZE_BOUNDS.dMax },
-  pid_pitch_p: { min: DEFAULT_QUAD_SIZE_BOUNDS.pMin, max: DEFAULT_QUAD_SIZE_BOUNDS.pMax },
-  pid_pitch_i: { min: DEFAULT_QUAD_SIZE_BOUNDS.iMin, max: DEFAULT_QUAD_SIZE_BOUNDS.iMax },
-  pid_pitch_d: { min: DEFAULT_QUAD_SIZE_BOUNDS.dMin, max: DEFAULT_QUAD_SIZE_BOUNDS.dMax },
-  pid_yaw_p: { min: DEFAULT_QUAD_SIZE_BOUNDS.pMin, max: DEFAULT_QUAD_SIZE_BOUNDS.pMax },
-  pid_yaw_i: { min: DEFAULT_QUAD_SIZE_BOUNDS.iMin, max: DEFAULT_QUAD_SIZE_BOUNDS.iMax },
-  pid_yaw_d: { min: 0, max: DEFAULT_QUAD_SIZE_BOUNDS.dMax }, // Yaw D can be 0 (common config)
+  pid_roll_p: { min: PID_GATE.pMin, max: PID_GATE.pMax },
+  pid_roll_i: { min: PID_GATE.iMin, max: PID_GATE.iMax },
+  pid_roll_d: { min: PID_GATE.dMin, max: PID_GATE.dMax },
+  pid_pitch_p: { min: PID_GATE.pMin, max: PID_GATE.pMax },
+  pid_pitch_i: { min: PID_GATE.iMin, max: PID_GATE.iMax },
+  pid_pitch_d: { min: PID_GATE.dMin, max: PID_GATE.dMax },
+  pid_yaw_p: { min: PID_GATE.pMin, max: PID_GATE.pMax },
+  pid_yaw_i: { min: PID_GATE.iMin, max: PID_GATE.iMax },
+  pid_yaw_d: { min: 0, max: PID_GATE.dMax }, // Yaw D can be 0 (common config)
 };
 
 /**
@@ -255,9 +273,13 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
         if (!mspClient) throw new Error('MSP client not initialized');
         if (!mspClient.isConnected()) throw new Error('Flight controller not connected');
 
-        const ffRecs = input.feedforwardRecommendations ?? [];
-        const totalRecs =
-          input.filterRecommendations.length + input.pidRecommendations.length + ffRecs.length;
+        // Informational/advisory-only recommendations must never be auto-applied.
+        // The renderer already filters them; this is defense-in-depth for every
+        // caller (wizard, debug server, future clients).
+        const pidRecs = input.pidRecommendations.filter((r) => !r.informational);
+        const ffRecs = (input.feedforwardRecommendations ?? []).filter((r) => !r.informational);
+        const actionableFilters = input.filterRecommendations.filter((r) => !r.informational);
+        const totalRecs = actionableFilters.length + pidRecs.length + ffRecs.length;
 
         // Zero recommendations: skip apply, return success without reboot
         if (totalRecs === 0) {
@@ -276,10 +298,9 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
         };
 
         // Pre-apply validation: reject entire apply if any value is out of BF range
-        const actionableFilters = input.filterRecommendations.filter((r) => !r.informational);
         validateRecommendationBounds(actionableFilters, 'Filter');
         validateRecommendationBounds(ffRecs, 'Feedforward');
-        validateRecommendationBounds(input.pidRecommendations, 'PID');
+        validateRecommendationBounds(pidRecs, 'PID');
 
         // Order matters: MSP commands first (PIDs), then CLI operations
         // (filters, save). The apply flow enters CLI explicitly for filter/FF
@@ -302,13 +323,13 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
         // Read current PID config before any changes — used for rollback on filter failure
         let currentConfig: PIDConfiguration | undefined;
         let appliedPIDs = 0;
-        if (input.pidRecommendations.length > 0) {
+        if (pidRecs.length > 0) {
           sendProgress({ stage: 'pid', message: 'Applying PID changes via MSP...', percent: 5 });
 
           currentConfig = await mspClient.getPIDConfiguration();
           const newConfig: PIDConfiguration = JSON.parse(JSON.stringify(currentConfig));
 
-          for (const rec of input.pidRecommendations) {
+          for (const rec of pidRecs) {
             const match = rec.setting.match(/^pid_(roll|pitch|yaw)_(p|i|d)$/i);
             if (!match) {
               logger.warn(`Unknown PID setting: ${rec.setting}, skipping`);
@@ -331,8 +352,7 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
 
         // Stage 2: Apply filter recommendations via CLI
         let appliedFilters = 0;
-        // Filter out informational/advisory-only recommendations — they are for display only
-        const actionableFilterRecs = input.filterRecommendations.filter((r) => !r.informational);
+        const actionableFilterRecs = actionableFilters;
         const needsCLI = actionableFilterRecs.length > 0 || ffRecs.length > 0;
         if (needsCLI) {
           sendProgress({ stage: 'filter', message: 'Entering CLI mode...', percent: 50 });
@@ -523,7 +543,8 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
               mspClient,
               currentSession.tuningType,
               currentSession.appliedPIDChanges,
-              currentSession.appliedFilterChanges
+              currentSession.appliedFilterChanges,
+              currentSession.appliedFeedforwardChanges
             );
             await tuningSessionManager!.updatePhase(profileId, currentSession.phase, {
               applyVerified: verifyResult.verified,

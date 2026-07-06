@@ -240,7 +240,7 @@ export function useTuningWizard(logId: string, mode: TuningMode = 'full'): UseTu
         mode === TUNING_MODE.PID
           ? []
           : (filterResult?.recommendations ?? []).filter(
-              (r) => r.currentValue !== r.recommendedValue
+              (r) => !r.informational && r.currentValue !== r.recommendedValue
             );
       // For Flash Tune mode, PID recs come from transfer function analysis
       const allPidRecs =
@@ -249,12 +249,16 @@ export function useTuningWizard(logId: string, mode: TuningMode = 'full'): UseTu
           : mode === TUNING_MODE.FLASH
             ? (tfResult?.recommendations ?? [])
             : (pidResult?.recommendations ?? []);
+      // Informational recs (P-HI-P, P-PIDLIM, P-DTE-BLOCK, …) are advisory-only
+      // and must never be auto-applied.
       const pidRecs = allPidRecs.filter(
-        (r) => r.setting.startsWith('pid_') && r.currentValue !== r.recommendedValue
+        (r) =>
+          !r.informational && r.setting.startsWith('pid_') && r.currentValue !== r.recommendedValue
       );
       // CLI-based settings: feedforward_*, iterm_relax_*, and any other non-MSP settings
       const ffRecs = allPidRecs.filter(
-        (r) => !r.setting.startsWith('pid_') && r.currentValue !== r.recommendedValue
+        (r) =>
+          !r.informational && !r.setting.startsWith('pid_') && r.currentValue !== r.recommendedValue
       );
 
       const hasChanges = filterRecs.length + pidRecs.length + ffRecs.length > 0;

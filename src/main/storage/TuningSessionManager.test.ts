@@ -264,6 +264,57 @@ describe('TuningSessionManager', () => {
       expect(completed.phase).toBe(TUNING_PHASE.COMPLETED);
     });
 
+    // Zero-change apply skips verification (PR #241) — *_analysis → completed is legal
+    it('allows filter_analysis → completed (zero-change apply)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.FILTER);
+      await manager.updatePhase('profile-1', TUNING_PHASE.FILTER_ANALYSIS);
+      const completed = await manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED);
+      expect(completed.phase).toBe(TUNING_PHASE.COMPLETED);
+    });
+
+    it('allows pid_analysis → completed (zero-change apply)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.PID);
+      await manager.updatePhase('profile-1', TUNING_PHASE.PID_ANALYSIS);
+      const completed = await manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED);
+      expect(completed.phase).toBe(TUNING_PHASE.COMPLETED);
+    });
+
+    it('allows flash_analysis → completed (zero-change apply)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.FLASH);
+      await manager.updatePhase('profile-1', TUNING_PHASE.FLASH_ANALYSIS);
+      const completed = await manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED);
+      expect(completed.phase).toBe(TUNING_PHASE.COMPLETED);
+    });
+
+    it('rejects filter_flight_pending → completed (no analysis skip)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.FILTER);
+      await expect(manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED)).rejects.toThrow(
+        'Invalid phase transition'
+      );
+    });
+
+    it('rejects pid_flight_pending → completed (no analysis skip)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.PID);
+      await expect(manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED)).rejects.toThrow(
+        'Invalid phase transition'
+      );
+    });
+
+    it('rejects flash_flight_pending → completed (no analysis skip)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.FLASH);
+      await expect(manager.updatePhase('profile-1', TUNING_PHASE.COMPLETED)).rejects.toThrow(
+        'Invalid phase transition'
+      );
+    });
+
+    it('rejects cross-mode transition from analysis (pid session → filter_applied)', async () => {
+      await manager.createSession('profile-1', TUNING_TYPE.PID);
+      await manager.updatePhase('profile-1', TUNING_PHASE.PID_ANALYSIS);
+      await expect(manager.updatePhase('profile-1', TUNING_PHASE.FILTER_APPLIED)).rejects.toThrow(
+        'Invalid phase transition'
+      );
+    });
+
     it('rejects transitions from completed phase', async () => {
       await manager.createSession('profile-1');
       await manager.updatePhase('profile-1', TUNING_PHASE.FILTER_LOG_READY);

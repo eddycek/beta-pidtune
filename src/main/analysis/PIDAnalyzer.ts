@@ -380,7 +380,7 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
   );
 
   // FF recommendations: RC-link baseline + step-response refinement, merged (no duplicates)
-  const rcLinkBaselineRecs = recommendRCLinkBaseline(feedforwardContext);
+  const rcLinkBaselineRecs = recommendRCLinkBaseline(feedforwardContext, flightStyle);
   const stepFFRecs = recommendFeedforward(feedforwardAnalysis ?? undefined, feedforwardContext);
   const ffRecommendations = mergeFFRecommendations(rcLinkBaselineRecs, stepFFRecs);
   rawRecommendations.push(...ffRecommendations);

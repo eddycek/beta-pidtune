@@ -15,14 +15,31 @@ import type {
   MechanicalHealthIssue,
   MechanicalHealthResult,
 } from '@shared/types/analysis.types';
-import { THROTTLE_MIN_FLIGHT, THROTTLE_MAX_HOVER } from './constants';
+import { THROTTLE_MIN_FLIGHT, THROTTLE_MAX_HOVER, NOISE_LEVEL_BY_SIZE } from './constants';
+import type { DroneSize } from '@shared/types/profile.types';
 
 export type { HealthSeverity, MechanicalHealthIssue, MechanicalHealthResult };
 
 // ---- Constants ----
 
-/** Noise floor above this dB level indicates extreme noise (mechanical issue) */
+/** Noise floor above this dB level indicates extreme noise (mechanical issue).
+ * Baseline for a 5" quad; smaller quads are naturally noisier, so the effective
+ * threshold is derived from NOISE_LEVEL_BY_SIZE (highDb + margin) when the
+ * drone size is known — a healthy whoop hovers around -20…-15 dB and must not
+ * be flagged as damaged hardware. */
 export const EXTREME_NOISE_FLOOR_DB = -20;
+
+/** Margin (dB) above the size's "high noise" classification threshold before
+ * noise is considered a mechanical fault rather than just a dirty build. */
+export const EXTREME_NOISE_MARGIN_DB = 5;
+
+/** Resolve the extreme-noise threshold for a drone size (falls back to 5" baseline). */
+export function resolveExtremeNoiseThresholdDb(droneSize?: DroneSize): number {
+  if (!droneSize) return EXTREME_NOISE_FLOOR_DB;
+  const levels = NOISE_LEVEL_BY_SIZE[droneSize];
+  if (!levels) return EXTREME_NOISE_FLOOR_DB;
+  return Math.max(EXTREME_NOISE_FLOOR_DB, levels.highDb + EXTREME_NOISE_MARGIN_DB);
+}
 
 /** Per-axis noise floor difference above this dB indicates asymmetry */
 export const AXIS_ASYMMETRY_THRESHOLD_DB = 8;
@@ -74,8 +91,12 @@ function computeHoverVariance(
 /**
  * Check for extreme noise floor issues from FFT analysis results.
  */
-function checkExtremeNoise(noiseProfile: NoiseProfile): MechanicalHealthIssue[] {
+function checkExtremeNoise(
+  noiseProfile: NoiseProfile,
+  droneSize?: DroneSize
+): MechanicalHealthIssue[] {
   const issues: MechanicalHealthIssue[] = [];
+  const thresholdDb = resolveExtremeNoiseThresholdDb(droneSize);
   const axes: Array<{ name: 'roll' | 'pitch' | 'yaw'; floor: number }> = [
     { name: 'roll', floor: noiseProfile.roll.noiseFloorDb },
     { name: 'pitch', floor: noiseProfile.pitch.noiseFloorDb },
@@ -83,14 +104,14 @@ function checkExtremeNoise(noiseProfile: NoiseProfile): MechanicalHealthIssue[] 
   ];
 
   for (const axis of axes) {
-    if (axis.floor > EXTREME_NOISE_FLOOR_DB) {
+    if (axis.floor > thresholdDb) {
       issues.push({
         type: 'extreme_noise',
         severity: 'critical',
         message: `Extreme noise on ${axis.name} axis (${axis.floor.toFixed(0)} dB). Check for damaged prop, loose motor mount, or excessive vibration.`,
         affectedAxis: axis.name,
         measuredValue: axis.floor,
-        threshold: EXTREME_NOISE_FLOOR_DB,
+        threshold: thresholdDb,
       });
     }
   }
@@ -197,12 +218,13 @@ function generateSummary(status: HealthSeverity, issues: MechanicalHealthIssue[]
  */
 export function checkMechanicalHealth(
   flightData: BlackboxFlightData,
-  noiseProfile: NoiseProfile
+  noiseProfile: NoiseProfile,
+  droneSize?: DroneSize
 ): MechanicalHealthResult {
   const issues: MechanicalHealthIssue[] = [];
 
-  // Check 1: Extreme noise floor
-  issues.push(...checkExtremeNoise(noiseProfile));
+  // Check 1: Extreme noise floor (size-aware — whoops are naturally noisier)
+  issues.push(...checkExtremeNoise(noiseProfile, droneSize));
 
   // Check 2: Axis asymmetry
   issues.push(...checkAxisAsymmetry(noiseProfile));

@@ -182,7 +182,8 @@ export const RC_TUNING = {
 export const ADVANCED_CONFIG = {
   GYRO_SYNC_DENOM: u8(0, 'gyro_sync_denom'),
   PID_PROCESS_DENOM: u8(1, 'pid_process_denom'),
-  DEBUG_MODE: u8(18, 'debug_mode'),
+  // debug_mode (offset 18) intentionally not mapped — analysis reads it from
+  // the BBL header (flight-time value), never via MSP.
 } as const;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

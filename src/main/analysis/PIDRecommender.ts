@@ -18,6 +18,7 @@ import {
   PID_STYLE_THRESHOLDS,
   DAMPING_RATIO_MIN,
   DAMPING_RATIO_MAX,
+  DAMPING_RATIO_MAX_MICRO,
   DAMPING_RATIO_DEADZONE,
   QUAD_SIZE_BOUNDS,
   DEFAULT_QUAD_SIZE_BOUNDS,
@@ -148,6 +149,8 @@ export function recommendPID(
     const overshootThreshold = isYaw ? thresholds.overshootMax * 1.5 : thresholds.overshootMax;
     const moderateOvershoot = isYaw ? thresholds.overshootMax : thresholds.moderateOvershoot;
     const sluggishRiseMs = isYaw ? thresholds.sluggishRise * 1.5 : thresholds.sluggishRise;
+    // KB §6: ALL overshoot/ringing thresholds relax ×1.5 for yaw (slower axis, less authority)
+    const ringingThreshold = isYaw ? thresholds.ringingMax * 1.5 : thresholds.ringingMax;
 
     // FF-dominated overshoot: skip P/D rules, recommend FF adjustment instead
     if (axisFFDominated && profile.meanOvershoot > moderateOvershoot) {
@@ -246,7 +249,7 @@ export function recommendPID(
 
     // Rule 3: Excessive ringing → increase D (BF: any visible bounce-back should be addressed)
     const maxRinging = Math.max(...profile.responses.map((r) => r.ringingCount));
-    if (maxRinging > thresholds.ringingMax) {
+    if (maxRinging > ringingThreshold) {
       const targetD = clamp(base.D + 5, bounds.dMin, bounds.dMax);
       if (targetD !== pids.D && !(axisName === 'yaw' && pids.D === 0)) {
         // Don't duplicate if we already recommended D increase for overshoot
@@ -336,7 +339,10 @@ export function recommendPID(
   // Post-process: validate D/P damping ratio for coordinated P/D recommendations.
   // Only applies to roll and pitch (yaw often has D=0).
   // Must run BEFORE informational P warnings so damping ratio recs take priority.
-  validateDampingRatio(recommendations, currentPIDs, bounds);
+  // Micro quads (whoops) legitimately run D/P up to ~0.95 per community presets
+  const dampingMax =
+    droneSize === '1"' || droneSize === '2.5"' ? DAMPING_RATIO_MAX_MICRO : DAMPING_RATIO_MAX;
+  validateDampingRatio(recommendations, currentPIDs, bounds, dampingMax);
 
   // Re-run DTE gating after damping ratio — damping ratio may have added new D recs
   // (P-DR-UD underdamped) that also need to be blocked when D is ineffective.
@@ -461,13 +467,15 @@ function detectLowP(
 function validateDampingRatio(
   recommendations: PIDRecommendation[],
   currentPIDs: PIDConfiguration,
-  bounds: QuadSizeBounds
+  bounds: QuadSizeBounds,
+  maxRatio: number = DAMPING_RATIO_MAX
 ): void {
   for (const axisName of ['roll', 'pitch'] as const) {
     const pids = currentPIDs[axisName];
 
-    const pRec = recommendations.find((r) => r.setting === `pid_${axisName}_p`);
-    const dRec = recommendations.find((r) => r.setting === `pid_${axisName}_d`);
+    // Informational recs (e.g. a DTE-blocked D increase) are not real changes
+    const pRec = recommendations.find((r) => r.setting === `pid_${axisName}_p` && !r.informational);
+    const dRec = recommendations.find((r) => r.setting === `pid_${axisName}_d` && !r.informational);
 
     // Compute resulting P and D after applying any recommendations
     const resultP = pRec ? pRec.recommendedValue : pids.P;
@@ -492,9 +500,9 @@ function validateDampingRatio(
           ruleId: `P-DR-UD-${axisName}`,
         });
       }
-    } else if (ratio > DAMPING_RATIO_MAX && dRec && !pRec) {
+    } else if (ratio > maxRatio && dRec && !pRec) {
       // D was increased by a rule but P wasn't adjusted — ratio pushed too high
-      const targetP = clamp(Math.round(resultD / DAMPING_RATIO_MAX), bounds.pMin, bounds.pMax);
+      const targetP = clamp(Math.round(resultD / maxRatio), bounds.pMin, bounds.pMax);
       if (targetP > pids.P && Math.abs(targetP - pids.P) >= DAMPING_RATIO_DEADZONE) {
         recommendations.push({
           setting: `pid_${axisName}_p`,
@@ -506,7 +514,7 @@ function validateDampingRatio(
           ruleId: `P-DR-OD-${axisName}`,
         });
       }
-    } else if (ratio > DAMPING_RATIO_MAX && dRec && pRec) {
+    } else if (ratio > maxRatio && dRec && pRec) {
       // Both P and D were adjusted (e.g. P-OS-P + P-OS-D from same overshoot rule)
       // but the combined result exceeds damping ratio.
       // Use the CURRENT P (not reduced P) as anchor to avoid dragging D below its
@@ -514,7 +522,7 @@ function validateDampingRatio(
       // (reducedP × 0.85) can produce D < currentD — the opposite of what the
       // overshoot rule intended.
       const anchorP = Math.max(resultP, pids.P);
-      const clampedD = clamp(Math.round(anchorP * DAMPING_RATIO_MAX), bounds.dMin, bounds.dMax);
+      const clampedD = clamp(Math.round(anchorP * maxRatio), bounds.dMin, bounds.dMax);
       if (clampedD < pids.D) {
         // Clamped D would be LOWER than current — drop the D rec entirely
         // rather than recommending a counterproductive decrease
@@ -522,14 +530,14 @@ function validateDampingRatio(
         if (dIdx >= 0) recommendations.splice(dIdx, 1);
       } else if (clampedD !== dRec.recommendedValue) {
         dRec.recommendedValue = clampedD;
-        dRec.reason += ` (D clamped from ${resultD} to ${clampedD} to maintain D/P ratio ≤ ${DAMPING_RATIO_MAX}.)`;
+        dRec.reason += ` (D clamped from ${resultD} to ${clampedD} to maintain D/P ratio ≤ ${maxRatio}.)`;
         dRec.confidence = 'low';
       }
-    } else if (ratio > DAMPING_RATIO_MAX && !dRec && pRec && pRec.recommendedValue < pids.P) {
+    } else if (ratio > maxRatio && !dRec && pRec && pRec.recommendedValue < pids.P) {
       // P was decreased (e.g. overshoot rule) but D wasn't adjusted
       // (e.g. blocked by D-term effectiveness gating) — ratio pushed too high.
       // Only triggers on P decrease — P increase would lower the ratio, not raise it.
-      const targetD = clamp(Math.round(resultP * DAMPING_RATIO_MAX), bounds.dMin, bounds.dMax);
+      const targetD = clamp(Math.round(resultP * maxRatio), bounds.dMin, bounds.dMax);
       if (targetD < pids.D && Math.abs(targetD - pids.D) >= DAMPING_RATIO_DEADZONE) {
         recommendations.push({
           setting: `pid_${axisName}_d`,
@@ -541,9 +549,9 @@ function validateDampingRatio(
           ruleId: `P-DR-OD-${axisName}`,
         });
       }
-    } else if (ratio > DAMPING_RATIO_MAX && !dRec && !pRec) {
+    } else if (ratio > maxRatio && !dRec && !pRec) {
       // No existing recommendations but ratio is already too high — reduce D
-      const targetD = clamp(Math.round(resultP * DAMPING_RATIO_MAX), bounds.dMin, bounds.dMax);
+      const targetD = clamp(Math.round(resultP * maxRatio), bounds.dMin, bounds.dMax);
       if (Math.abs(targetD - pids.D) >= DAMPING_RATIO_DEADZONE) {
         recommendations.push({
           setting: `pid_${axisName}_d`,
@@ -577,6 +585,7 @@ function applyDTermEffectiveness(
   for (let i = recommendations.length - 1; i >= 0; i--) {
     const rec = recommendations[i];
     if (!rec.setting.includes('_d')) continue;
+    if (rec.informational) continue; // already-blocked or advisory recs — nothing to gate
 
     const isIncrease = rec.recommendedValue > rec.currentValue;
 
@@ -585,10 +594,23 @@ function applyDTermEffectiveness(
         // D is highly effective — safe to increase
         rec.confidence = 'high';
       } else if (dte.overall < 0.3) {
-        // D is mostly amplifying noise — BLOCK the increase.
-        // Increasing D when 93%+ of its output is noise causes hot motors
-        // and counterproductive compensatory P changes from damping ratio.
-        recommendations.splice(i, 1);
+        // D is mostly amplifying noise — BLOCK the increase and tell the
+        // pilot why (KB §6: redirect to "improve filters first"). Without the
+        // informational rec the D change would silently vanish and the pilot
+        // would get no guidance at all.
+        recommendations.splice(i, 1, {
+          setting: rec.setting,
+          currentValue: rec.currentValue,
+          recommendedValue: rec.currentValue, // informational — same value
+          reason:
+            `A D increase was considered for this axis, but D-term effectiveness is very low ` +
+            `(${(dte.overall * 100).toFixed(0)}%) — most of D's output is amplified noise, so more D ` +
+            'would mainly heat motors. Improve filtering first (run a Filter Tune), then revisit D.',
+          impact: 'stability',
+          confidence: 'low',
+          informational: true,
+          ruleId: `P-DTE-BLOCK-${rec.setting}`,
+        });
       } else {
         // Balanced range — allow increase but warn about noise cost
         rec.reason += ` D-term effectiveness is moderate (${(dte.overall * 100).toFixed(0)}%) — monitor motor temperatures after applying.`;
@@ -1089,11 +1111,22 @@ function generateFrequencyDomainRecs(
     }
   }
 
-  // Rule TF-4: DC gain deficit → I-term too low (poor steady-state tracking)
-  if (tf.dcGainDb < -1.0) {
-    // DC gain below -1 dB means system doesn't fully track setpoint at steady state
+  // Rule TF-4: DC gain deficit → I-term too low (poor steady-state tracking).
+  // Style-aware, consistent with the step-response SSE rule: a DC gain of
+  // 20·log10(1 − sse/100) dB corresponds to the style's steady-state error limit
+  // (e.g. 5% balanced → −0.45 dB), so both I-term paths trigger at the same error.
+  // Floored at −0.4 dB: the Wiener DC-gain estimate from hover data carries
+  // ~±0.3 dB noise, and a tighter threshold (aggressive style → −0.26 dB) would
+  // fire persistently on well-tuned quads and ratchet I upward every session.
+  const TF4_MIN_THRESHOLD_DB = -0.4;
+  const dcGainThresholdDb = Math.min(
+    20 * Math.log10(1 - thresholds.steadyStateErrorMax / 100),
+    TF4_MIN_THRESHOLD_DB
+  );
+  if (tf.dcGainDb < dcGainThresholdDb) {
     const deficit = Math.abs(tf.dcGainDb);
-    const iStep = deficit > 3 ? 10 : 5;
+    // +10 at 2× the style threshold (mirrors the step-response rule's 2× escalation)
+    const iStep = deficit > 2 * Math.abs(dcGainThresholdDb) ? 10 : 5;
     const targetI = clamp(base.I + iStep, bounds.iMin, bounds.iMax);
     if (targetI !== pids.I) {
       const existingIRec = recommendations.find((r) => r.setting === `pid_${axisName}_i`);
@@ -1107,7 +1140,7 @@ function generateFrequencyDomainRecs(
             'indicating the system does not fully track the target at steady state. ' +
             'Increasing I-term improves long-term tracking accuracy.',
           impact: 'response',
-          confidence: deficit > 3 ? 'medium' : 'low',
+          confidence: deficit > 2 * Math.abs(dcGainThresholdDb) ? 'medium' : 'low',
           ruleId: `TF-4-I-${axisName}`,
         });
       }
@@ -1279,7 +1312,8 @@ export function recommendItermRelaxCutoff(
   }
 
   // Rule PW-IRELAX-CUTOFF: propwash severe (≥5×) + cutoff above floor → lower cutoff by 5
-  // Floor = 10 for all severe propwash, per community guidance "reduce 15 → 10 → 7 → 5".
+  // Floor = 7 for severe propwash (PROPWASH_IRELAX_CUTOFF_FLOOR_SEVERE), per community
+  // guidance "reduce 15 → 10 → 7".
   if (
     propWash &&
     propWash.meanSeverity >= PROPWASH_SEVERITY_SEVERE &&
@@ -1424,9 +1458,11 @@ export function recommendPidsumLimits(
       reason:
         `PID sum limit is at the default ${PIDSUM_LIMIT_DEFAULT} but your quad weighs ${droneWeightG}g. ` +
         `Increasing to ${PIDSUM_LIMIT_RECOMMENDED} gives the PID controller full authority for heavy/powerful builds, ` +
-        'preventing output clipping during aggressive corrections.',
+        'preventing output clipping during aggressive corrections. Apply manually only if your build ' +
+        'has thrust headroom — on underpowered heavy quads a higher limit can cause motor saturation and heat.',
       impact: 'response',
       confidence: 'low',
+      informational: true,
       ruleId: 'P-PIDLIM',
     });
   }
@@ -1438,9 +1474,11 @@ export function recommendPidsumLimits(
       recommendedValue: PIDSUM_LIMIT_YAW_RECOMMENDED,
       reason:
         `Yaw PID sum limit is at the default ${PIDSUM_LIMIT_YAW_DEFAULT} but your quad weighs ${droneWeightG}g. ` +
-        `Increasing to ${PIDSUM_LIMIT_YAW_RECOMMENDED} prevents yaw authority clipping on heavy builds.`,
+        `Increasing to ${PIDSUM_LIMIT_YAW_RECOMMENDED} prevents yaw authority clipping on heavy builds. ` +
+        'Apply manually only if your build has thrust headroom — a 2.5× yaw limit jump is significant.',
       impact: 'response',
       confidence: 'low',
+      informational: true,
       ruleId: 'P-PIDLIM',
     });
   }

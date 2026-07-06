@@ -54,7 +54,7 @@ Entry point: `src/main/index.ts`. Manages MSPClient, ProfileManager, SnapshotMan
 ## Auto-Apply Recommendations
 
 **Apply Flow** (orchestrated in `TUNING_APPLY_RECOMMENDATIONS` IPC handler):
-0. Pre-apply: `validateRecommendationBounds()` rejects if any value out of `BF_SETTING_RANGES`
+0. Pre-apply: `validateRecommendationBounds()` rejects if any value out of `BF_SETTING_RANGES` (firmware-exact ranges; PID entries use the cross-size envelope of `QUAD_SIZE_BOUNDS` so size-specific recommender output — e.g. 6"/7" D up to 100 — always passes; includes feedforward gates like `feedforward_smooth_factor`)
 1. PID profile selection safety net — ensures FC is on the correct BF PID profile
 2. Apply PID changes via MSP (must happen before CLI mode). Saves `currentConfig` for rollback
 3. Enter CLI mode
@@ -64,7 +64,7 @@ Entry point: `src/main/index.ts`. Manages MSPClient, ProfileManager, SnapshotMan
 7. Save to EEPROM and reboot FC
 8. Post-reboot: inline verification + post-tuning snapshot creation
 
-**Edge case**: If total recommendations = 0, returns success without reboot.
+**Edge case**: If total recommendations = 0, returns success without reboot. Zero-change sessions may complete directly: `TuningSessionManager` allows the `*_analysis → completed` transition (verification is skipped when nothing was applied, PR #241).
 
 **Important**: MSP commands must execute before CLI mode (FC only processes CLI in CLI mode → MSP timeouts).
 
@@ -115,4 +115,4 @@ Snapshots carry tuning metadata (`tuningSessionNumber`, `tuningType`, `snapshotR
 
 ## Post-Apply Verification
 
-On smart reconnect after apply, `verifyAppliedConfig()` (`src/main/utils/verifyAppliedConfig.ts`) reads back full PID and filter configuration from FC via MSP, compares ALL readable values (not just applied changes), and runs sanity checks (P/I/D=0, filter bypassed). Retries PID write+readback once on mismatch (10s timeout). Results stored on `TuningSession.applyVerified`, `applyMismatches`, `applyExpected`, `applyActual`, `applySuspicious`, and `autoReportId`. On failure, auto-submits diagnostic report (Pro only).
+On smart reconnect after apply, `verifyAppliedConfig()` (`src/main/utils/verifyAppliedConfig.ts`) reads back full PID and filter configuration from FC via MSP, compares ALL readable values (not just applied changes), and runs sanity checks (P/I/D=0, filter bypassed). Applied feedforward changes are also verified for the MSP-readable subset (boost, smooth/jitter factor, max rate limit); CLI-only FF settings (e.g. `feedforward_averaging`, `tpa_*`) are skipped during verification (same treatment as `rpm_filter_q`); only unknown settings land in `unchecked`. Retries PID write+readback once on mismatch (10s timeout). Results stored on `TuningSession.applyVerified`, `applyMismatches`, `applyExpected`, `applyActual`, `applySuspicious`, and `autoReportId`. On failure, auto-submits diagnostic report (Pro only).

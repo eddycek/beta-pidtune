@@ -3,6 +3,7 @@ import {
   estimateTransferFunction,
   estimateAllAxes,
   computeSyntheticStepResponse,
+  computeDcGainDb,
   extractMetrics,
   type BodeResult,
   type SyntheticStepResponse,
@@ -353,7 +354,9 @@ describe('extractMetrics', () => {
     expect(metrics.phaseMarginDeg).toBe(90); // Default
   });
 
-  it('should extract dcGainDb from first Bode magnitude bin', () => {
+  it('should extract dcGainDb from the 1-5 Hz band (falls back past coarse bins)', () => {
+    // No bins fall in 1-5 Hz (0, 50, 100) → fall back to the first bin above DC,
+    // NOT the unreliable bin 0.
     const bode: BodeResult = {
       frequencies: new Float64Array([0, 50, 100]),
       magnitude: new Float64Array([-2.5, -1.0, -5.0]),
@@ -362,7 +365,7 @@ describe('extractMetrics', () => {
 
     const step: SyntheticStepResponse = { timeMs: [0], response: [1] };
     const metrics = extractMetrics(bode, step, 4000);
-    expect(metrics.dcGainDb).toBe(-2.5);
+    expect(metrics.dcGainDb).toBe(-1.0);
   });
 
   it('should return dcGainDb 0 for empty Bode magnitude', () => {
@@ -375,6 +378,56 @@ describe('extractMetrics', () => {
     const step: SyntheticStepResponse = { timeMs: [0], response: [1] };
     const metrics = extractMetrics(bode, step, 4000);
     expect(metrics.dcGainDb).toBe(0);
+  });
+});
+
+describe('computeDcGainDb', () => {
+  it('averages magnitude over the 1-5 Hz band, excluding bin 0', () => {
+    // Bins at 0,1,2,3,4,5,10 Hz — band = indices 1..5, bin 0 (value 10) excluded
+    const bode: BodeResult = {
+      frequencies: new Float64Array([0, 1, 2, 3, 4, 5, 10]),
+      magnitude: new Float64Array([10, -1, -2, -3, -2, -2, -20]),
+      phase: new Float64Array(7),
+    };
+    // mean(-1, -2, -3, -2, -2) = -2.0
+    expect(computeDcGainDb(bode)).toBeCloseTo(-2.0, 10);
+  });
+
+  it('ignores bins above 5 Hz', () => {
+    const bode: BodeResult = {
+      frequencies: new Float64Array([0, 2, 4, 6, 8]),
+      magnitude: new Float64Array([5, -1, -3, -30, -40]),
+      phase: new Float64Array(5),
+    };
+    // Only 2 and 4 Hz are in band: mean(-1, -3) = -2
+    expect(computeDcGainDb(bode)).toBeCloseTo(-2.0, 10);
+  });
+
+  it('falls back to magnitude[1] when no bins are in the 1-5 Hz band', () => {
+    const bode: BodeResult = {
+      frequencies: new Float64Array([0, 20, 40]),
+      magnitude: new Float64Array([-9.0, -0.5, -6.0]),
+      phase: new Float64Array(3),
+    };
+    expect(computeDcGainDb(bode)).toBe(-0.5);
+  });
+
+  it('falls back to magnitude[0] when only one bin exists', () => {
+    const bode: BodeResult = {
+      frequencies: new Float64Array([0]),
+      magnitude: new Float64Array([-3.5]),
+      phase: new Float64Array(1),
+    };
+    expect(computeDcGainDb(bode)).toBe(-3.5);
+  });
+
+  it('returns 0 for empty magnitude', () => {
+    const bode: BodeResult = {
+      frequencies: new Float64Array([]),
+      magnitude: new Float64Array([]),
+      phase: new Float64Array([]),
+    };
+    expect(computeDcGainDb(bode)).toBe(0);
   });
 });
 

@@ -234,10 +234,53 @@ describe('recommend', () => {
       dterm_lpf1_static_hz: 157,
       dyn_notch_min_hz: 100,
       dyn_notch_max_hz: 600, // Peak at 180 is within notch range
+      dyn_notch_count: 3, // Notch must be ENABLED to cover the peak
     };
 
     const recs = recommend(noise, current);
     // Notch can handle resonance → no resonance-based LPF change
+    const gyroRec = recs.find((r) => r.setting === 'gyro_lpf1_static_hz');
+    expect(gyroRec).toBeUndefined();
+  });
+
+  it('should act on a resonance peak in notch range when dyn_notch_count = 0 (notch disabled)', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 180, amplitude: 15, type: 'frame_resonance' }],
+    });
+
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf1_static_hz: 225,
+      dterm_lpf1_static_hz: 157,
+      dyn_notch_min_hz: 100,
+      dyn_notch_max_hz: 600, // Peak nominally "in range"…
+      dyn_notch_count: 0, // …but a disabled notch covers nothing
+    };
+
+    const recs = recommend(noise, current);
+    const gyroRec = recs.find((r) => r.setting === 'gyro_lpf1_static_hz');
+    expect(gyroRec).toBeDefined();
+    expect(gyroRec!.ruleId).toBe('F-RES-GYRO');
+    expect(gyroRec!.recommendedValue).toBeLessThan(225);
+  });
+
+  it('should treat undefined dyn_notch_count as enabled (BF default is 3 notches)', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 180, amplitude: 15, type: 'frame_resonance' }],
+    });
+
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS, // dyn_notch_count undefined
+      gyro_lpf1_static_hz: 225,
+      dterm_lpf1_static_hz: 157,
+      dyn_notch_min_hz: 100,
+      dyn_notch_max_hz: 600,
+    };
+
+    const recs = recommend(noise, current);
+    // Unknown count → assume BF default (enabled) → notch covers the peak
     const gyroRec = recs.find((r) => r.setting === 'gyro_lpf1_static_hz');
     expect(gyroRec).toBeUndefined();
   });
@@ -750,6 +793,22 @@ describe('LPF2 recommendations', () => {
     expect(dtermLpf2Rec!.impact).toBe('latency');
   });
 
+  it('should NOT disable dterm LPF2 at exactly the -45 dB threshold (strict <)', () => {
+    // DTERM_LPF2_DISABLE_THRESHOLD_DB = -45: worstFloor must be strictly below
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -50 });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dterm_lpf2_static_hz: 150,
+      rpm_filter_harmonics: 3,
+    };
+
+    const recs = recommend(noise, current);
+    const dtermLpf2Rec = recs.find(
+      (r) => r.setting === 'dterm_lpf2_static_hz' && r.ruleId === 'F-LPF2-DIS-DTERM'
+    );
+    expect(dtermLpf2Rec).toBeUndefined();
+  });
+
   it('should recommend enabling gyro LPF2 when noise is high and no RPM', () => {
     // overallLevel='high', RPM off, gyro_lpf2_static_hz=0 → recommend 250
     const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
@@ -1109,15 +1168,17 @@ describe('recommendRpmFilterQ', () => {
   });
 
   it('should use correct midpoint for 3" quad', () => {
+    // 3"/4" range raised to 700-1000 (midpoint 850) — SupaflyFPV EasyTune
+    // presets set rpm_filter_q = 1000 for 3-4"
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       rpm_filter_harmonics: 3,
-      rpm_filter_q: 400, // well below 750 midpoint for 3"
+      rpm_filter_q: 400, // well below 850 midpoint for 3"
     };
     const rec = recommendRpmFilterQ(settings, '3"');
     expect(rec).toBeDefined();
     expect(rec!.setting).toBe('rpm_filter_q');
-    expect(rec!.recommendedValue).toBe(750);
+    expect(rec!.recommendedValue).toBe(850);
     expect(rec!.ruleId).toBe('F-RPM-Q');
   });
 
@@ -1125,13 +1186,24 @@ describe('recommendRpmFilterQ', () => {
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       rpm_filter_harmonics: 3,
-      rpm_filter_q: 1000, // above 750 midpoint for 4"
+      rpm_filter_q: 500, // well below 850 midpoint for 4"
     };
     const rec = recommendRpmFilterQ(settings, '4"');
     expect(rec).toBeDefined();
     expect(rec!.setting).toBe('rpm_filter_q');
-    expect(rec!.recommendedValue).toBe(750);
+    expect(rec!.recommendedValue).toBe(850);
     expect(rec!.ruleId).toBe('F-RPM-Q');
+  });
+
+  it('should not flag Q=1000 on 3-4" quads (within 700-1000 preset range)', () => {
+    // Q=1000 is only ~18% above the 850 midpoint — SupaflyFPV presets use it
+    const settings: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      rpm_filter_harmonics: 3,
+      rpm_filter_q: 1000,
+    };
+    expect(recommendRpmFilterQ(settings, '3"')).toBeUndefined();
+    expect(recommendRpmFilterQ(settings, '4"')).toBeUndefined();
   });
 });
 

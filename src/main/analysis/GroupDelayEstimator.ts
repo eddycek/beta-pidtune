@@ -6,9 +6,10 @@
  * response latency — excessive delay causes sluggish response and
  * can create instability through phase lag.
  *
- * BF filter stack:
- * - Gyro path: LPF1 (PT1/biquad) → LPF2 (PT1/biquad) → dynamic notch(es)
- * - D-term path: LPF1 (PT1/biquad) → LPF2 (PT1/biquad)
+ * BF filter stack (BF 4.3+ defaults all lowpasses to PT1; biquad/PT2/PT3
+ * remain CLI options but are not the default):
+ * - Gyro path: LPF1 (PT1) → LPF2 (PT1) → dynamic notch(es)
+ * - D-term path: LPF1 (PT1) → LPF2 (PT1)
  *
  * Group delay for a first-order PT1 lowpass at frequency f:
  *   τ(f) = 1 / (2π * fc * (1 + (f/fc)²))
@@ -95,25 +96,26 @@ export function notchGroupDelay(notchHz: number, freqHz: number, Q: number = 3.0
   const w = 2 * Math.PI * freqHz;
 
   // Notch: H(s) = (s² + w0²) / (s² + (w0/Q)*s + w0²)
-  // This is a simplification — near the notch the delay peaks
+  // At s = jω the numerator (w0² − ω²) is purely real, so its phase
+  // derivative is zero almost everywhere — the group delay comes from
+  // the denominator alone:
+  //   τ(ω) = bw * (w0² + ω²) / ((w0² − ω²)² + bw²ω²),  bw = w0/Q
+  // Sanity anchor (BF filtering doc): phase is 90° at center, 45° at the
+  // −3 dB edges — ≈1 ms for a wide notch centered near 250 Hz.
   const w0sq = w0 * w0;
   const wsq = w * w;
   const bw = w0 / Q;
 
-  // Numerator phase derivative contribution
-  const numDeriv = (2 * w) / (w0sq + wsq); // d/dω arctan(0 at w0) for numerator
-  // Denominator phase derivative contribution
-  const denomDeriv = (bw * (w0sq + wsq)) / ((w0sq - wsq) * (w0sq - wsq) + bw * bw * wsq);
-
-  // Group delay = denominator phase derivative - numerator phase derivative
-  return Math.abs(denomDeriv - numDeriv);
+  return (bw * (w0sq + wsq)) / ((w0sq - wsq) * (w0sq - wsq) + bw * bw * wsq);
 }
 
 /**
  * Estimate the group delay of the current filter configuration.
  *
- * BF uses PT1 (first-order) for LPF1 and biquad (second-order) for LPF2
- * by default. This is configurable, but PT1+biquad is the most common setup.
+ * BF 4.3+ defaults every gyro/D-term lowpass (LPF1 and LPF2) to PT1.
+ * Biquad remains a CLI option but modeling it by default would
+ * overestimate LPF2 delay by roughly 2× (BF doc: PT1 ≈ 1 ms @ 100 Hz,
+ * biquad ≈ 2 ms @ 100 Hz).
  *
  * @param settings - Current filter settings from the FC
  * @param referenceHz - Frequency at which to compute delay (default: 80 Hz)
@@ -142,9 +144,9 @@ export function estimateGroupDelay(
     });
   }
 
-  // Gyro LPF2 (biquad second-order by default in BF)
+  // Gyro LPF2 (PT1 by default in BF 4.3+)
   if (settings.gyro_lpf2_static_hz > 0) {
-    const delay = biquadGroupDelay(settings.gyro_lpf2_static_hz, referenceHz);
+    const delay = pt1GroupDelay(settings.gyro_lpf2_static_hz, referenceHz);
     gyroTotalS += delay;
     filters.push({
       type: 'gyro_lpf2',
@@ -185,9 +187,9 @@ export function estimateGroupDelay(
     });
   }
 
-  // D-term LPF2 (biquad)
+  // D-term LPF2 (PT1 by default in BF 4.3+)
   if (settings.dterm_lpf2_static_hz > 0) {
-    const delay = biquadGroupDelay(settings.dterm_lpf2_static_hz, referenceHz);
+    const delay = pt1GroupDelay(settings.dterm_lpf2_static_hz, referenceHz);
     dtermTotalS += delay;
     filters.push({
       type: 'dterm_lpf2',
