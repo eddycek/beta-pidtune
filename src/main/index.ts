@@ -421,7 +421,8 @@ async function initialize(): Promise<void> {
                     mspClient,
                     session.tuningType,
                     session.appliedPIDChanges,
-                    session.appliedFilterChanges
+                    session.appliedFilterChanges,
+                    session.appliedFeedforwardChanges
                   );
                   const verifiedSession = await tuningSessionManager.updatePhase(
                     existingProfile.id,

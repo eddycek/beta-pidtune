@@ -450,9 +450,11 @@ describe('useConnection', () => {
       renderHook(() => useConnection());
 
       // Simulate error in connection status
-      connectionChangeCallback({
-        connected: false,
-        error: 'Failed to read from port',
+      await act(async () => {
+        connectionChangeCallback({
+          connected: false,
+          error: 'Failed to read from port',
+        });
       });
 
       await waitFor(() => {

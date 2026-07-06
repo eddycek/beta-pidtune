@@ -375,9 +375,14 @@ export async function verifyAppliedConfig(
         unchecked.push(change.setting);
         continue;
       }
-      const act = ffConfig[configKey] as number;
+      const act = ffConfig[configKey];
+      if (act === undefined) {
+        // Optional field — older firmware/layouts may not report it via MSP
+        unchecked.push(change.setting);
+        continue;
+      }
       expected[change.setting] = change.newValue;
-      actual[change.setting] = act;
+      actual[change.setting] = act as number;
       if (act !== change.newValue) {
         mismatches.push(`${change.setting}: expected ${change.newValue}, got ${act}`);
       }
