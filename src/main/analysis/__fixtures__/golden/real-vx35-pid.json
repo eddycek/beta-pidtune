@@ -11,9 +11,9 @@
   },
   "pitch": {
     "responses": 12,
-    "meanOvershoot": 56.6,
-    "meanRiseTimeMs": 113.9,
-    "meanSettlingTimeMs": 499,
+    "meanOvershoot": 2.2,
+    "meanRiseTimeMs": 56,
+    "meanSettlingTimeMs": 388,
     "meanLatencyMs": 7.8,
     "meanSteadyStateError": 11.5
   },
@@ -31,7 +31,8 @@
   },
   "transferFunctionMetrics": null,
   "warningCodes": [
-    "feedforward_active"
+    "feedforward_active",
+    "step_deconv_disagreement"
   ],
   "recommendations": [
     {
@@ -44,7 +45,7 @@
     {
       "setting": "pid_pitch_d",
       "currentValue": 46,
-      "recommendedValue": 36,
+      "recommendedValue": 40,
       "ruleId": "P-DR-OD-pitch",
       "confidence": "medium"
     },
@@ -61,13 +62,6 @@
       "currentValue": 84,
       "recommendedValue": 94,
       "ruleId": "P-SSE-I-pitch",
-      "confidence": "high"
-    },
-    {
-      "setting": "pid_pitch_p",
-      "currentValue": 47,
-      "recommendedValue": 42,
-      "ruleId": "P-OS-P-pitch",
       "confidence": "high"
     },
     {

@@ -615,6 +615,35 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 
 **Deduplication**: For overlapping recommendations on same parameter — keep more aggressive value, upgrade confidence if either was 'high'.
 
+### Step Response Metrics Source (Deconvolved vs Per-Step)
+
+PID Tune's headline overshoot/rise/settling come from the **Wiener-deconvolved
+(stacked) step response** (`StepResponseStacker.ts`) when trustworthy, split by
+commanded input magnitude at **500 deg/s** (`INPUT_SPLIT_THRESHOLD_DEG_S`, the
+PIDtoolbox convention — Betaflight's FF/D-setpoint transition behaves
+differently in the two regimes; the high-magnitude group is preferred as it
+exercises P/D). Windows with max |setpoint| < 50 deg/s are excluded (no
+commanded-input information; they only dilute coherence). The mean coherence is
+**input-energy-weighted** (weighted by S_xx per bin over 1-30 Hz) so bins the
+pilot never excited don't drag it down.
+
+Trust gates: ≥2 Welch windows in the group AND weighted coherence ≥ 0.5
+(`DECONV_COHERENCE_GATE`). Otherwise the axis falls back to per-step means
+(`metricsSource: 'per_step'`, the pre-2026-07 behavior).
+
+**Threshold scaling**: the deconvolved estimate is inherently smoother than
+direct per-step measurement — the same physical response reads ≈half the
+overshoot/settling (calibrated on the demo generator's known second-order
+plant; see `DECONV_THRESHOLD_SCALE = 0.5` in constants.ts). When an axis's
+metrics come from deconvolution, overshoot and settling THRESHOLDS are scaled
+by 0.5; rise-time thresholds are unchanged (comparable between methods).
+`PID_STYLE_THRESHOLDS` themselves stay calibrated for per-step values.
+
+**Cross-check**: when both methods produce meaningful overshoot (≥5 pp) and
+disagree by >50% relative, a `step_deconv_disagreement` warning is emitted —
+per-step means on sparse/noisy logs can be dominated by a few bad step
+measurements (observed on real logs: per-step 56% vs deconvolved 2%).
+
 ### PID Recommendation Rules
 
 Per-axis rules anchored to **flight PIDs from BBL header** (convergent design — re-analyzing same flight after applying yields no further changes):

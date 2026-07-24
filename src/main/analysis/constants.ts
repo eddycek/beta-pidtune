@@ -343,6 +343,37 @@ export const STEP_COOLDOWN_MS = 100;
 /** Step must hold for at least this long (ms) */
 export const STEP_MIN_HOLD_MS = 50;
 
+// ---- Deconvolved (Stacked) Step Response ----
+
+/** Input-magnitude split threshold for the deconvolved step response (deg/s).
+ * Betaflight's feedforward / D-setpoint transition behaves differently for
+ * small vs large inputs — PIDtoolbox convention splits at 500 deg/s. */
+export const INPUT_SPLIT_THRESHOLD_DEG_S = 500;
+
+/** Minimum Welch windows per split group before its deconvolved metrics are
+ * trusted (a single window has trivially-1 coherence and high variance). */
+export const DECONV_MIN_WINDOWS = 2;
+
+/** Relative disagreement between deconvolved and per-step overshoot above
+ * which a cross-check warning is emitted (0.5 = 50%). */
+export const DECONV_DISAGREEMENT_RATIO = 0.5;
+
+/** Absolute overshoot floor (percentage points) below which the relative
+ * disagreement check is skipped — 2% vs 4% is a 100% relative difference
+ * but both mean "no overshoot problem". */
+export const DECONV_DISAGREEMENT_MIN_PP = 5;
+
+/** Scale applied to overshoot and settling THRESHOLDS when the axis metrics
+ * come from the deconvolved (stacked) step response. The Wiener estimate is
+ * inherently smoother than direct per-step measurement (Hanning windowing +
+ * regularization + impulse smoothing) — the same physical response reads
+ * roughly half the overshoot/settling. Calibrated on the demo generator's
+ * known second-order plant across tuning cycles (per-step → deconvolved
+ * overshoot: 25.8→13.5, 6.3→1.6, 3.0→1.2, 2.1→1.1; settling 500→205,
+ * 446→44, 105→46). Rise time is comparable between methods and is NOT
+ * scaled. PID_STYLE_THRESHOLDS remain calibrated for per-step values. */
+export const DECONV_THRESHOLD_SCALE = 0.5;
+
 // ---- Step Response Metrics ----
 
 /** Settling tolerance: +/-2% of target */

@@ -104,7 +104,8 @@ export interface AnalysisWarning {
     | 'verification_dissimilar_steps'
     | 'verification_dissimilar_activity'
     | 'verification_rejected'
-    | 'flat_step_response';
+    | 'flat_step_response'
+    | 'step_deconv_disagreement';
   message: string;
   severity: 'info' | 'warning' | 'error';
 }
@@ -472,6 +473,37 @@ export interface AxisStepProfile {
   meanSteadyStateError: number;
   /** Mean FF energy ratio across steps that have ffEnergyRatio (0-1) */
   meanFFEnergyRatio?: number;
+  /** Where the headline overshoot/rise/settling numbers came from.
+   * 'deconvolved' = Wiener-stacked step response (preferred when coherent);
+   * 'per_step' = arithmetic mean of individually measured steps (fallback). */
+  metricsSource?: 'deconvolved' | 'per_step';
+  /** Per-step means kept for cross-checking when metricsSource='deconvolved' */
+  perStepMetrics?: {
+    meanOvershoot: number;
+    meanRiseTimeMs: number;
+    meanSettlingTimeMs: number;
+  };
+  /** Deconvolved step response split by commanded input magnitude
+   * (Betaflight's FF/D-setpoint transition behaves differently below vs
+   * above the split threshold, so the two regimes are measured separately) */
+  inputSplit?: {
+    splitThresholdDegS: number;
+    low?: DeconvolvedStepMetrics;
+    high?: DeconvolvedStepMetrics;
+  };
+}
+
+/** Metrics of a Wiener-deconvolved (stacked) step response */
+export interface DeconvolvedStepMetrics {
+  overshootPercent: number;
+  riseTimeMs: number;
+  settlingTimeMs: number;
+  /** Number of Welch windows stacked into this estimate */
+  windowCount: number;
+  /** Mean setpoint→gyro coherence over the stick band (0-1) */
+  coherenceMean?: number;
+  /** Normalized synthetic step response for chart rendering */
+  stepResponse?: { timeMs: number[]; response: number[] };
 }
 
 /** A single PID recommendation */

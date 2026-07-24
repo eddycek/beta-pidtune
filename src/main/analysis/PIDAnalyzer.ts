@@ -75,6 +75,8 @@ import {
   mergeFFRecommendations,
 } from './FeedforwardAnalyzer';
 import { analyzeThrottleTF } from './ThrottleTFAnalyzer';
+import { computeDeconvolvedStepResponse } from './StepResponseStacker';
+import { DECONV_DISAGREEMENT_RATIO, DECONV_DISAGREEMENT_MIN_PP } from './constants';
 
 /** Default PID configuration if none provided */
 const DEFAULT_PIDS: PIDConfiguration = {
@@ -95,6 +97,8 @@ interface StepExtractionResult {
     pitch: StepResponse[];
     yaw: StepResponse[];
   };
+  /** Warnings from the deconvolved/per-step cross-check */
+  deconvWarnings?: AnalysisWarning[];
   tfResult?: undefined;
   tfMetrics?: undefined;
 }
@@ -213,12 +217,71 @@ async function extractViaStepResponse(
   const pitch = aggregateAxisMetrics(pitchResponses);
   const yaw = aggregateAxisMetrics(yawResponses);
 
+  // Deconvolved (stacked) step response — the primary source of
+  // overshoot/rise/settling when coherent. Per-step means remain the
+  // fallback and serve as a cross-check.
+  const profiles = { roll, pitch, yaw };
+  const deconvWarnings: AnalysisWarning[] = [];
+  try {
+    const deconv = computeDeconvolvedStepResponse(flightData);
+    for (const axis of ['roll', 'pitch', 'yaw'] as const) {
+      const profile = profiles[axis];
+      const axisDeconv = deconv[axis];
+      profile.metricsSource = 'per_step';
+      if (axisDeconv.low || axisDeconv.high) {
+        profile.inputSplit = {
+          splitThresholdDegS: deconv.splitThresholdDegS,
+          ...(axisDeconv.low ? { low: axisDeconv.low } : {}),
+          ...(axisDeconv.high ? { high: axisDeconv.high } : {}),
+        };
+      }
+      const primary = axisDeconv.primary;
+      if (!primary) continue;
+
+      // Cross-check: large relative disagreement between the two methods
+      // (above a floor where both mean "fine") lowers trust in the data
+      const perStepOvershoot = profile.meanOvershoot;
+      const bothMeaningful =
+        Math.max(perStepOvershoot, primary.overshootPercent) >= DECONV_DISAGREEMENT_MIN_PP &&
+        profile.responses.length > 0;
+      if (bothMeaningful) {
+        const rel =
+          Math.abs(primary.overshootPercent - perStepOvershoot) /
+          Math.max(perStepOvershoot, primary.overshootPercent);
+        if (rel > DECONV_DISAGREEMENT_RATIO) {
+          deconvWarnings.push({
+            code: 'step_deconv_disagreement',
+            message:
+              `Deconvolved and per-step overshoot disagree on ${axis} ` +
+              `(${primary.overshootPercent.toFixed(0)}% vs ${perStepOvershoot.toFixed(0)}%). ` +
+              'Metrics may be less reliable — consider a cleaner flight with distinct stick snaps.',
+            severity: 'warning',
+          });
+        }
+      }
+
+      // Promote the deconvolved metrics to the headline values
+      profile.perStepMetrics = {
+        meanOvershoot: profile.meanOvershoot,
+        meanRiseTimeMs: profile.meanRiseTimeMs,
+        meanSettlingTimeMs: profile.meanSettlingTimeMs,
+      };
+      profile.meanOvershoot = primary.overshootPercent;
+      profile.meanRiseTimeMs = primary.riseTimeMs;
+      profile.meanSettlingTimeMs = primary.settlingTimeMs;
+      profile.metricsSource = 'deconvolved';
+    }
+  } catch {
+    // Deconvolution unavailable (e.g. extremely short log) — keep per-step
+  }
+
   return {
     mode: 'step_response',
-    profiles: { roll, pitch, yaw },
+    profiles,
     steps,
     allResponses: [...rollResponses, ...pitchResponses, ...yawResponses],
     axisResponses: { roll: rollResponses, pitch: pitchResponses, yaw: yawResponses },
+    ...(deconvWarnings.length > 0 ? { deconvWarnings } : {}),
   };
 }
 
@@ -486,7 +549,12 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
   onProgress?.({ step: 'scoring', percent: 100 });
 
   // ── Warnings ──
-  const warnings: AnalysisWarning[] = [...qualityResult.warnings];
+  const warnings: AnalysisWarning[] = [
+    ...qualityResult.warnings,
+    ...(extracted.mode === 'step_response' && extracted.deconvWarnings
+      ? extracted.deconvWarnings
+      : []),
+  ];
   if (throttleTF?.tpaWarning) {
     warnings.push({
       code: 'tpa_variance',

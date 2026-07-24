@@ -46,6 +46,12 @@ const SETTLING_TOLERANCE = 0.02;
  * reflects noise, not tracking, and would dilute the mean. */
 const COHERENCE_BAND_MAX_HZ = 30;
 
+/** Windows whose max |setpoint| is below this (deg/s) carry no information
+ * about the commanded response — the input auto-spectrum is ~zero while the
+ * gyro still contributes noise, so including them only dilutes coherence.
+ * Used by the magnitude-split estimator (sparse stick-snap flights). */
+const MIN_WINDOW_INPUT_DEG_S = 50;
+
 // ---- Types ----
 
 export interface BodeResult {
@@ -58,6 +64,11 @@ export interface BodeResult {
   /** Magnitude-squared coherence γ²(f) = |S_xy|²/(S_xx·S_yy), 0-1 per bin.
    * Absent when only one Welch window fits (coherence is trivially 1). */
   coherence?: Float64Array;
+  /** Input auto-spectrum S_xx per bin — used to weight the mean coherence by
+   * where the commanded input actually has energy (step inputs concentrate
+   * at low frequencies; a uniform band mean would over-weight bins the
+   * pilot never excited). */
+  coherenceWeights?: Float64Array;
 }
 
 export interface SyntheticStepResponse {
@@ -236,28 +247,190 @@ export function estimateTransferFunction(
   onProgress?.({ step: 'metrics', percent: 80 });
 
   return {
-    bode: { frequencies, magnitude, phase, ...(coherence ? { coherence } : {}) },
+    bode: {
+      frequencies,
+      magnitude,
+      phase,
+      ...(coherence ? { coherence, coherenceWeights: sxx.slice() } : {}),
+    },
     impulseResponse,
   };
 }
 
 /**
  * Mean coherence over the stick-input band (1 to COHERENCE_BAND_MAX_HZ).
+ *
+ * When the Bode result carries input auto-spectrum weights (S_xx), the mean
+ * is input-energy-weighted: bins where the pilot commanded energy dominate,
+ * bins with no excitation (whose coherence is meaningless) contribute
+ * nothing. Falls back to a uniform band mean without weights.
  * Returns undefined when the Bode result carries no coherence data.
  */
 export function computeCoherenceMean(bode: BodeResult): number | undefined {
   if (!bode.coherence) return undefined;
   let sum = 0;
+  let weightSum = 0;
   let count = 0;
   for (let i = 0; i < bode.frequencies.length; i++) {
     const f = bode.frequencies[i];
     if (f >= DC_REFERENCE_MIN_HZ && f <= COHERENCE_BAND_MAX_HZ) {
-      sum += bode.coherence[i];
+      const w = bode.coherenceWeights ? bode.coherenceWeights[i] : 1;
+      sum += bode.coherence[i] * w;
+      weightSum += w;
       count++;
     }
     if (f > COHERENCE_BAND_MAX_HZ) break;
   }
-  return count > 0 ? sum / count : undefined;
+  if (count === 0 || weightSum <= 0) return undefined;
+  return sum / weightSum;
+}
+
+/** One split group of a magnitude-split transfer function estimate */
+export interface SplitTFGroup {
+  bode: BodeResult;
+  impulseResponse: Float64Array;
+  /** Number of Welch windows accumulated into this group */
+  windowCount: number;
+  /** Mean coherence over the stick band (undefined when windowCount < 2) */
+  coherenceMean?: number;
+}
+
+export interface SplitTFResult {
+  /** Windows whose max |setpoint| is below the split threshold */
+  low?: SplitTFGroup;
+  /** Windows whose max |setpoint| is at or above the split threshold */
+  high?: SplitTFGroup;
+}
+
+/**
+ * Estimate the setpoint→gyro transfer function separately for low- and
+ * high-magnitude stick input (à la PIDtoolbox's <500 / >500 deg/s split).
+ *
+ * Betaflight's feedforward and D-setpoint transition behave differently for
+ * small vs large inputs, so a single averaged response mixes two regimes.
+ * Each Welch window is classified by its max |setpoint| and accumulated into
+ * the corresponding group; groups with no windows are omitted.
+ */
+export function estimateSplitTransferFunction(
+  setpoint: Float64Array,
+  gyro: Float64Array,
+  sampleRateHz: number,
+  splitThresholdDegS: number
+): SplitTFResult {
+  const N = Math.min(setpoint.length, gyro.length);
+  const windowSize = Math.min(TF_WINDOW_SIZE, largestPowerOf2(N));
+
+  if (windowSize < 64) {
+    throw new Error(`Signal too short for transfer function estimation: ${N} samples`);
+  }
+
+  const step = Math.floor(windowSize * (1 - TF_OVERLAP));
+  const numWindows = Math.max(1, Math.floor((N - windowSize) / step) + 1);
+  const numBins = windowSize / 2 + 1;
+
+  interface Acc {
+    sxyRe: Float64Array;
+    sxyIm: Float64Array;
+    sxx: Float64Array;
+    syy: Float64Array;
+    count: number;
+  }
+  const makeAcc = (): Acc => ({
+    sxyRe: new Float64Array(numBins),
+    sxyIm: new Float64Array(numBins),
+    sxx: new Float64Array(numBins),
+    syy: new Float64Array(numBins),
+    count: 0,
+  });
+  const groups: Record<'low' | 'high', Acc> = { low: makeAcc(), high: makeAcc() };
+
+  const fft = new FFT(windowSize);
+
+  for (let w = 0; w < numWindows; w++) {
+    const start = w * step;
+
+    // Classify window by max |setpoint|; skip windows with no commanded
+    // input — they add gyro noise to S_yy without input energy in S_xx,
+    // diluting coherence without informing the response estimate.
+    let maxAbs = 0;
+    for (let i = start; i < start + windowSize; i++) {
+      const abs = Math.abs(setpoint[i]);
+      if (abs > maxAbs) maxAbs = abs;
+    }
+    if (maxAbs < MIN_WINDOW_INPUT_DEG_S) continue;
+    const acc = maxAbs >= splitThresholdDegS ? groups.high : groups.low;
+
+    const xSeg = applyHanningWindow(setpoint.subarray(start, start + windowSize));
+    const ySeg = applyHanningWindow(gyro.subarray(start, start + windowSize));
+
+    const X = fft.createComplexArray();
+    const Y = fft.createComplexArray();
+    fft.realTransform(X, xSeg);
+    fft.completeSpectrum(X);
+    fft.realTransform(Y, ySeg);
+    fft.completeSpectrum(Y);
+
+    for (let i = 0; i < numBins; i++) {
+      const xRe = X[2 * i];
+      const xIm = X[2 * i + 1];
+      const yRe = Y[2 * i];
+      const yIm = Y[2 * i + 1];
+      acc.sxyRe[i] += yRe * xRe + yIm * xIm;
+      acc.sxyIm[i] += yIm * xRe - yRe * xIm;
+      acc.sxx[i] += xRe * xRe + xIm * xIm;
+      acc.syy[i] += yRe * yRe + yIm * yIm;
+    }
+    acc.count++;
+  }
+
+  const freqResolution = sampleRateHz / windowSize;
+
+  const finalizeGroup = (acc: Acc): SplitTFGroup | undefined => {
+    if (acc.count === 0) return undefined;
+
+    const epsilon = computeRegularization(acc.sxx, acc.count);
+    const frequencies = new Float64Array(numBins);
+    const magnitude = new Float64Array(numBins);
+    const phase = new Float64Array(numBins);
+    const hRe = new Float64Array(numBins);
+    const hIm = new Float64Array(numBins);
+    const coherence = acc.count >= 2 ? new Float64Array(numBins) : undefined;
+
+    for (let i = 0; i < numBins; i++) {
+      frequencies[i] = i * freqResolution;
+      const denom = acc.sxx[i] + epsilon;
+      hRe[i] = acc.sxyRe[i] / denom;
+      hIm[i] = acc.sxyIm[i] / denom;
+      const mag = Math.sqrt(hRe[i] * hRe[i] + hIm[i] * hIm[i]);
+      magnitude[i] = mag > 1e-12 ? 20 * Math.log10(mag) : -240;
+      phase[i] = (Math.atan2(hIm[i], hRe[i]) * 180) / Math.PI;
+      if (coherence) {
+        const crossPower = acc.sxyRe[i] * acc.sxyRe[i] + acc.sxyIm[i] * acc.sxyIm[i];
+        const autoProduct = acc.sxx[i] * acc.syy[i];
+        coherence[i] = autoProduct > 1e-20 ? Math.min(1, Math.max(0, crossPower / autoProduct)) : 0;
+      }
+    }
+
+    const impulseResponse = computeImpulseResponse(fft, hRe, hIm, windowSize);
+    const bode: BodeResult = {
+      frequencies,
+      magnitude,
+      phase,
+      ...(coherence ? { coherence, coherenceWeights: acc.sxx.slice() } : {}),
+    };
+    const coherenceMean = computeCoherenceMean(bode);
+    return {
+      bode,
+      impulseResponse,
+      windowCount: acc.count,
+      ...(coherenceMean !== undefined ? { coherenceMean } : {}),
+    };
+  };
+
+  return {
+    ...(groups.low.count > 0 ? { low: finalizeGroup(groups.low) } : {}),
+    ...(groups.high.count > 0 ? { high: finalizeGroup(groups.high) } : {}),
+  };
 }
 
 /**
@@ -390,10 +563,11 @@ function computeImpulseResponse(
  */
 export function computeSyntheticStepResponse(
   impulseResponse: Float64Array,
-  sampleRateHz: number
+  sampleRateHz: number,
+  durationS: number = STEP_RESPONSE_DURATION_S
 ): SyntheticStepResponse {
   const maxSamples = Math.min(
-    Math.floor(STEP_RESPONSE_DURATION_S * sampleRateHz),
+    Math.floor(durationS * sampleRateHz),
     Math.floor(impulseResponse.length / 2) // Use first half only
   );
 
