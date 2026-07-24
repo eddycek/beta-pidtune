@@ -791,6 +791,45 @@ describe('PIDRecommender', () => {
       };
     }
 
+    it('should skip TF rules for an axis with low coherence', () => {
+      const tf: TransferFunctionContext = {
+        // Critically low phase margin, but the TF is untrustworthy
+        roll: makeTFMetrics({ phaseMarginDeg: 25, coherenceMean: 0.2 }),
+      };
+
+      const recs = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'balanced',
+        tf
+      );
+
+      expect(recs.find((r) => r.setting === 'pid_roll_d')).toBeUndefined();
+    });
+
+    it('should apply TF rules when coherence is high', () => {
+      const tf: TransferFunctionContext = {
+        roll: makeTFMetrics({ phaseMarginDeg: 25, coherenceMean: 0.9 }),
+      };
+
+      const recs = recommendPID(
+        emptyProfile(),
+        emptyProfile(),
+        emptyProfile(),
+        DEFAULT_PIDS,
+        undefined,
+        undefined,
+        'balanced',
+        tf
+      );
+
+      expect(recs.find((r) => r.setting === 'pid_roll_d')).toBeDefined();
+    });
+
     it('should use TF metrics when responses are empty', () => {
       const tf: TransferFunctionContext = {
         roll: makeTFMetrics({ phaseMarginDeg: 25 }), // critically low

@@ -835,7 +835,7 @@ Scored before generating filter recommendations:
 
 **Warnings**: `short_hover_time` (<5s), `low_logging_rate` (<2kHz), `low_step_magnitude` (RMS <10 deg/s), `low_coherence` (per-axis coherence ≤0.3 — severity: <0.15 warning, 0.15-0.3 info)
 
-> **Implementation note**: coherence is an optional input — the Wiener estimator does not currently compute S_yy, so `coherenceMean` is absent and the axis-coverage sub-score falls back to a neutral 50. Coherence-based scoring activates only if/when the estimator provides it.
+> **Implementation note**: the Wiener estimator computes magnitude-squared coherence γ²(f) = |S_xy|²/(S_xx·S_yy) per axis and reports `coherenceMean` averaged over the 1-30 Hz stick-input band (requires ≥2 Welch windows — coherence over a single window is trivially 1 and is omitted). Coherence feeds (a) the axis-coverage sub-score and `low_coherence` warnings above, and (b) a **TF rule gate**: TF-1..TF-4 gain recommendations are skipped for any axis with `coherenceMean < 0.5` (`TF_COHERENCE_GATE`) — a low-coherence transfer function reflects noise/disturbance, not commanded motion, and must not drive gain changes.
 
 ### Quality Tiers & Confidence Adjustment
 

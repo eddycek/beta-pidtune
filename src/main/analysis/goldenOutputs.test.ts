@@ -177,7 +177,7 @@ function summarizePIDResult(r: PIDAnalysisResult) {
               bandwidthHz: round(m.bandwidthHz, 0),
               phaseMarginDeg: round(m.phaseMarginDeg, 0),
               gainMarginDb: round(m.gainMarginDb, 0),
-              dcGainDb: round(m.dcGainDb, 1),
+              dcGainDb: round(m.dcGainDb ?? 0, 1),
               overshootPercent: round(m.overshootPercent, 0),
               riseTimeMs: round(m.riseTimeMs, 0),
               settlingTimeMs: round(m.settlingTimeMs, 0),

@@ -4,6 +4,7 @@ import {
   estimateAllAxes,
   computeSyntheticStepResponse,
   computeDcGainDb,
+  computeCoherenceMean,
   extractMetrics,
   type BodeResult,
   type SyntheticStepResponse,
@@ -534,3 +535,57 @@ function findClosestBin(frequencies: Float64Array, targetHz: number): number {
   }
   return closestIdx;
 }
+
+describe('coherence', () => {
+  const sampleRate = 4000;
+
+  it('reports high coherence for a clean LTI system', () => {
+    const setpoint = generateMixedStickInputs(sampleRate, 10);
+    const gyro = generateSecondOrderResponse(setpoint, sampleRate, 20, 0.7, 5);
+
+    const { bode } = estimateTransferFunction(setpoint, gyro, sampleRate);
+    expect(bode.coherence).toBeDefined();
+    const mean = computeCoherenceMean(bode);
+    expect(mean).toBeDefined();
+    expect(mean!).toBeGreaterThan(0.8);
+  });
+
+  it('reports low coherence when gyro is unrelated to setpoint', () => {
+    const setpoint = generateMixedStickInputs(sampleRate, 10);
+    // Gyro = deterministic multi-tone unrelated to the stick input
+    const gyro = new Float64Array(setpoint.length);
+    for (let i = 0; i < gyro.length; i++) {
+      const t = i / sampleRate;
+      gyro[i] =
+        40 * Math.sin(2 * Math.PI * 3.1 * t + 1.0) +
+        30 * Math.sin(2 * Math.PI * 7.7 * t + 2.0) +
+        20 * Math.sin(2 * Math.PI * 13.3 * t);
+    }
+
+    const { bode } = estimateTransferFunction(setpoint, gyro, sampleRate);
+    const mean = computeCoherenceMean(bode);
+    expect(mean).toBeDefined();
+    expect(mean!).toBeLessThan(0.5);
+  });
+
+  it('omits coherence when only one Welch window fits', () => {
+    // 8192 samples = exactly one TF window → coherence would be trivially 1
+    const setpoint = generateMixedStickInputs(sampleRate, 2.048);
+    const gyro = generateSecondOrderResponse(setpoint, sampleRate, 20, 0.7, 5);
+
+    const { bode } = estimateTransferFunction(setpoint, gyro, sampleRate);
+    expect(bode.coherence).toBeUndefined();
+    expect(computeCoherenceMean(bode)).toBeUndefined();
+  });
+
+  it('estimateAllAxes carries coherenceMean into metrics', () => {
+    const setpoint = generateMixedStickInputs(sampleRate, 10);
+    const gyro = generateSecondOrderResponse(setpoint, sampleRate, 20, 0.7, 5);
+    const axes = { roll: setpoint, pitch: setpoint, yaw: setpoint };
+    const gyros = { roll: gyro, pitch: gyro, yaw: gyro };
+
+    const result = estimateAllAxes(axes, gyros, sampleRate);
+    expect(result.metrics.roll.coherenceMean).toBeDefined();
+    expect(result.metrics.roll.coherenceMean!).toBeGreaterThan(0.8);
+  });
+});

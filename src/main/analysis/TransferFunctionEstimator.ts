@@ -41,6 +41,11 @@ const DC_REFERENCE_MAX_HZ = 5;
 /** Settling tolerance for synthetic step response (±2%) */
 const SETTLING_TOLERANCE = 0.02;
 
+/** Upper bound of the band used for the mean-coherence summary (Hz).
+ * Stick input carries energy roughly 0.5-40 Hz; coherence above that band
+ * reflects noise, not tracking, and would dilute the mean. */
+const COHERENCE_BAND_MAX_HZ = 30;
+
 // ---- Types ----
 
 export interface BodeResult {
@@ -50,6 +55,9 @@ export interface BodeResult {
   magnitude: Float64Array;
   /** Phase in degrees */
   phase: Float64Array;
+  /** Magnitude-squared coherence γ²(f) = |S_xy|²/(S_xx·S_yy), 0-1 per bin.
+   * Absent when only one Welch window fits (coherence is trivially 1). */
+  coherence?: Float64Array;
 }
 
 export interface SyntheticStepResponse {
@@ -74,6 +82,9 @@ export interface TransferFunctionMetrics {
   riseTimeMs: number;
   /** DC gain in dB — 0 dB = perfect steady-state tracking */
   dcGainDb: number;
+  /** Mean magnitude-squared coherence over the 1-30 Hz stick-input band (0-1).
+   * Undefined when the log was too short for multi-window Welch averaging. */
+  coherenceMean?: number;
 }
 
 export interface TransferFunctionResult {
@@ -130,10 +141,11 @@ export function estimateTransferFunction(
 
   const numBins = windowSize / 2 + 1;
 
-  // Accumulators for cross-spectral and auto-spectral density
+  // Accumulators for cross-spectral and auto-spectral densities
   const sxyRe = new Float64Array(numBins); // Real part of S_xy
   const sxyIm = new Float64Array(numBins); // Imaginary part of S_xy
   const sxx = new Float64Array(numBins); // |X(f)|^2
+  const syy = new Float64Array(numBins); // |Y(f)|^2 (for coherence)
 
   onProgress?.({ step: 'windowing', percent: 5 });
 
@@ -165,8 +177,9 @@ export function estimateTransferFunction(
       sxyRe[i] += yRe * xRe + yIm * xIm;
       sxyIm[i] += yIm * xRe - yRe * xIm;
 
-      // |X|^2
+      // |X|^2 and |Y|^2
       sxx[i] += xRe * xRe + xIm * xIm;
+      syy[i] += yRe * yRe + yIm * yIm;
     }
 
     onProgress?.({
@@ -188,6 +201,11 @@ export function estimateTransferFunction(
   const hRe = new Float64Array(numBins);
   const hIm = new Float64Array(numBins);
 
+  // Magnitude-squared coherence γ²(f) = |S_xy|²/(S_xx·S_yy).
+  // With a single Welch window it is identically 1 — report it only when
+  // at least 2 windows were averaged.
+  const coherence = numWindows >= 2 ? new Float64Array(numBins) : undefined;
+
   for (let i = 0; i < numBins; i++) {
     frequencies[i] = i * freqResolution;
 
@@ -198,6 +216,12 @@ export function estimateTransferFunction(
     const mag = Math.sqrt(hRe[i] * hRe[i] + hIm[i] * hIm[i]);
     magnitude[i] = mag > 1e-12 ? 20 * Math.log10(mag) : -240;
     phase[i] = (Math.atan2(hIm[i], hRe[i]) * 180) / Math.PI;
+
+    if (coherence) {
+      const crossPower = sxyRe[i] * sxyRe[i] + sxyIm[i] * sxyIm[i];
+      const autoProduct = sxx[i] * syy[i];
+      coherence[i] = autoProduct > 1e-20 ? Math.min(1, Math.max(0, crossPower / autoProduct)) : 0;
+    }
   }
 
   // Compute impulse response via IFFT of H(f)
@@ -206,9 +230,28 @@ export function estimateTransferFunction(
   onProgress?.({ step: 'metrics', percent: 80 });
 
   return {
-    bode: { frequencies, magnitude, phase },
+    bode: { frequencies, magnitude, phase, ...(coherence ? { coherence } : {}) },
     impulseResponse,
   };
+}
+
+/**
+ * Mean coherence over the stick-input band (1 to COHERENCE_BAND_MAX_HZ).
+ * Returns undefined when the Bode result carries no coherence data.
+ */
+export function computeCoherenceMean(bode: BodeResult): number | undefined {
+  if (!bode.coherence) return undefined;
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < bode.frequencies.length; i++) {
+    const f = bode.frequencies[i];
+    if (f >= DC_REFERENCE_MIN_HZ && f <= COHERENCE_BAND_MAX_HZ) {
+      sum += bode.coherence[i];
+      count++;
+    }
+    if (f > COHERENCE_BAND_MAX_HZ) break;
+  }
+  return count > 0 ? sum / count : undefined;
 }
 
 /**
@@ -398,6 +441,7 @@ export function extractMetrics(
   stepResponse: SyntheticStepResponse,
   _sampleRateHz: number
 ): TransferFunctionMetrics {
+  const coherenceMean = computeCoherenceMean(bode);
   return {
     bandwidthHz: computeBandwidth(bode),
     gainMarginDb: computeGainMargin(bode),
@@ -406,6 +450,7 @@ export function extractMetrics(
     settlingTimeMs: computeSettlingTime(stepResponse),
     riseTimeMs: computeRiseTime(stepResponse),
     dcGainDb: computeDcGainDb(bode),
+    ...(coherenceMean !== undefined ? { coherenceMean } : {}),
   };
 }
 
@@ -590,6 +635,7 @@ export function trimBode(bode: BodeResult, maxFreqHz: number): BodeResult {
     frequencies: bode.frequencies.slice(0, endIdx),
     magnitude: bode.magnitude.slice(0, endIdx),
     phase: bode.phase.slice(0, endIdx),
+    ...(bode.coherence ? { coherence: bode.coherence.slice(0, endIdx) } : {}),
   };
 }
 

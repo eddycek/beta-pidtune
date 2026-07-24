@@ -27,7 +27,7 @@
   },
   "dataQuality": {
     "tier": "excellent",
-    "overall": 90
+    "overall": 100
   },
   "transferFunctionMetrics": {
     "roll": {
@@ -92,41 +92,10 @@
       "confidence": "medium"
     },
     {
-      "setting": "pid_pitch_d",
-      "currentValue": 32,
-      "recommendedValue": 32,
-      "ruleId": "P-DTE-BLOCK-pid_pitch_d",
-      "confidence": "low",
-      "informational": true
-    },
-    {
-      "setting": "pid_roll_d",
-      "currentValue": 30,
-      "recommendedValue": 30,
-      "ruleId": "P-DTE-BLOCK-pid_roll_d",
-      "confidence": "low",
-      "informational": true
-    },
-    {
       "setting": "pid_roll_d",
       "currentValue": 30,
       "recommendedValue": 50,
       "ruleId": "P-PW-D-roll",
-      "confidence": "medium"
-    },
-    {
-      "setting": "pid_yaw_d",
-      "currentValue": 0,
-      "recommendedValue": 0,
-      "ruleId": "P-DTE-BLOCK-pid_yaw_d",
-      "confidence": "low",
-      "informational": true
-    },
-    {
-      "setting": "pid_yaw_p",
-      "currentValue": 45,
-      "recommendedValue": 40,
-      "ruleId": "TF-2-P-yaw",
       "confidence": "medium"
     },
     {

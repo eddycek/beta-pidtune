@@ -45,7 +45,7 @@ Noise analysis, step response, transfer function, and data quality scoring modul
 
 **Pipeline**: TransferFunctionEstimator (setpoint → gyro deconvolution → H(f) = S_xy(f) / S_xx(f))
 
-- **TransferFunctionEstimator**: Cross-spectral density estimation, bandwidth/phase margin extraction, `dcGainDb` field for I-term approximation (computed as the 1–5 Hz band average, not the unreliable bin 0; the -3 dB bandwidth reference uses the same band), PID recommendations based on frequency response characteristics
+- **TransferFunctionEstimator**: Cross-spectral density estimation, bandwidth/phase margin extraction, `dcGainDb` field for I-term approximation (computed as the 1–5 Hz band average, not the unreliable bin 0; the -3 dB bandwidth reference uses the same band), PID recommendations based on frequency response characteristics. Computes **magnitude-squared coherence** γ²(f) per axis (`BodeResult.coherence`, requires ≥2 Welch windows) and `coherenceMean` over the 1-30 Hz stick band (`TransferFunctionMetrics.coherenceMean`) — feeds the Wiener data-quality axis-coverage sub-score and gates TF-1..TF-4 recommendations per axis (`TF_COHERENCE_GATE = 0.5` in PIDRecommender)
 - Used in Flash Tune mode for combined filter + PID analysis from a single flight
 - IPC: `ANALYSIS_RUN_TRANSFER_FUNCTION` + `EVENT_ANALYSIS_PROGRESS`
 

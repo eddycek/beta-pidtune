@@ -333,10 +333,23 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
     }
     const setpointRMS = Math.sqrt(sumSq / setpointValues.length);
 
+    const tfMetrics = extracted.tfResult.metrics;
+    const coherenceMean =
+      tfMetrics.roll.coherenceMean !== undefined &&
+      tfMetrics.pitch.coherenceMean !== undefined &&
+      tfMetrics.yaw.coherenceMean !== undefined
+        ? {
+            roll: tfMetrics.roll.coherenceMean,
+            pitch: tfMetrics.pitch.coherenceMean,
+            yaw: tfMetrics.yaw.coherenceMean,
+          }
+        : undefined;
+
     qualityResult = scoreWienerDataQuality({
       sampleCount: flightData.frameCount,
       sampleRateHz: flightData.sampleRateHz,
       setpointRMS,
+      ...(coherenceMean ? { coherenceMean } : {}),
     });
   }
 

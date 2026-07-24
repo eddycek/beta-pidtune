@@ -995,6 +995,11 @@ const PHASE_MARGIN_LOW_DEG = 45;
 /** Phase margin threshold below which we consider the system critically under-damped */
 const PHASE_MARGIN_CRITICAL_DEG = 30;
 
+/** Minimum stick-band coherence for TF-derived gain recommendations.
+ * Below this the transfer function estimate is dominated by noise/disturbance
+ * rather than commanded motion, so TF-1..TF-4 must not fire for the axis. */
+const TF_COHERENCE_GATE = 0.5;
+
 /**
  * Generate PID recommendations from transfer function metrics (frequency domain).
  *
@@ -1011,6 +1016,14 @@ function generateFrequencyDomainRecs(
   bounds: QuadSizeBounds = DEFAULT_QUAD_SIZE_BOUNDS,
   flightStyle: FlightStyle = 'balanced'
 ): void {
+  // Coherence gate: when the setpoint→gyro coherence in the stick-input band
+  // is too low, the transfer function for this axis is not trustworthy enough
+  // to drive gain changes — skip all TF rules (the data quality scorer already
+  // emits a low_coherence warning for the axis).
+  if (tf.coherenceMean !== undefined && tf.coherenceMean < TF_COHERENCE_GATE) {
+    return;
+  }
+
   const isYaw = axisName === 'yaw';
   const overshootThreshold = isYaw ? thresholds.overshootMax * 1.5 : thresholds.overshootMax;
   const moderateOvershoot = isYaw ? thresholds.overshootMax : thresholds.moderateOvershoot;
