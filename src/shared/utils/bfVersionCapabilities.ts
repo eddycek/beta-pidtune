@@ -68,8 +68,12 @@ export function getBFCapabilities(version?: string): BFCapabilities {
     hasTpaLow: atLeast(v, 4, 5),
     hasRpmWeights: atLeast(v, 4, 5),
     hasAntiGravityCutoff: atLeast(v, 4, 5),
-    usesDMax: v.calendar,
-    hasChirp: v.calendar,
+    // BF 2025.12 still reports "4.6.0" via MSP_FC_VERSION (the internal
+    // version keeps incrementing — see headerValidation.isGyroScaledRemoved),
+    // so 4.6+ features must key off the classic version, not the calendar
+    // naming, or they'd never activate on real firmware.
+    usesDMax: atLeast(v, 4, 6),
+    hasChirp: atLeast(v, 4, 6),
   };
 }
 

@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3370 unit tests across 154 files (3347 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3372 unit tests across 154 files (3349 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -232,7 +232,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | File | Tests | Description |
 |------|-------|-------------|
 | `TuningWizard/charts/chartUtils.test.ts` | 20 | Data conversion, downsampling, findBestStep, robust Y domain |
-| `TuningWizard/charts/SpectrumChart.test.tsx` | 10 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0), rule-anchor peak tagging (tagged/untagged) |
+| `TuningWizard/charts/SpectrumChart.test.tsx` | 11 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0), rule-anchor peak tagging (tagged/untagged) |
 | `TuningWizard/charts/StepResponseChart.test.tsx` | 10 | Step response chart rendering, navigation |
 | `TuningWizard/charts/BodePlot.test.tsx` | 6 | Bode plot (magnitude + phase) rendering for transfer function, coherence γ² section (rendered with data, omitted without) |
 | `TuningWizard/charts/TFStepResponseChart.test.tsx` | 6 | TF synthetic step response chart, single/comparison modes, overshoot metrics, delta pill |
@@ -367,7 +367,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 23 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking, contiguous-run gating (findContiguousRuns, min 512 samples, length-weighted power average) |
 | `analysis/GroupDelayEstimator.test.ts` | 31 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default), per-size latency budget (budget fields, over-budget flags, size-aware warning, default fallback) |
 | `analysis/RpmFilterRecommender.test.ts` | 18 | RPM filter tuning rules: min_hz from dynamic-idle floor (gap/waste directions, deadzone, clamping), min_hz from measured fundamental track (lower-only), harmonic-count increase from integer-ratio tracks (tolerance, amplitude threshold, max cap), fade-range and weights advisories, cross-axis dedup |
-| `shared/utils/bfVersionCapabilities.test.ts` | 10 | BF version parsing (semver + calendar 2025.12), capability gating (4.4 baseline, 4.5 tpa_low/RPM weights/anti-gravity cutoff, 4.6 d_max rename + chirp), d_min→d_max CLI name translation |
+| `shared/utils/bfVersionCapabilities.test.ts` | 11 | BF version parsing (semver + calendar 2025.12), capability gating (4.4 baseline, 4.5 tpa_low/RPM weights/anti-gravity cutoff, 4.6 d_max rename + chirp), d_min→d_max CLI name translation |
 | `shared/utils/filterResponse.test.ts` | 18 | Filter magnitude models: PT1/PT2/PT3 −3 dB at cutoff (BF cutoff corrections), Butterworth biquad rolloff, notch depth/transparency, type dispatch, BF dynamic-LPF throttle curve (linear/expo/clamping), chain combination (dB summing, disabled stages, throttle evaluation, display floor), gyro LPF1 cutoff-at-throttle |
 
 ### Step Response Analysis

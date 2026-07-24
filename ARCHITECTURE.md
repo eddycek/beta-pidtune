@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Updated:** July 24, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3370 unit tests (3347 passing + 23 skipped), 154 files + 37 Playwright E2E tests**
+**Last Updated:** July 24, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3372 unit tests (3349 passing + 23 skipped), 154 files + 37 Playwright E2E tests**
 
 ---
 
@@ -852,12 +852,12 @@ Hardware error (FC timeout, USB disconnect)
 
 ## Testing Strategy
 
-**3370 unit tests across 154 files (3347 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
+**3372 unit tests across 154 files (3349 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
 
 | Area | Files | Tests |
 |------|-------|-------|
 | Blackbox Parser | 9 | 245 |
-| FFT Analysis (+ Data Quality + Spectrogram + Delay + Throttle Utils + RPM Rules + Filter Response + BF Capabilities) | 11 | 373 |
+| FFT Analysis (+ Data Quality + Spectrogram + Delay + Throttle Utils + RPM Rules + Filter Response + BF Capabilities) | 11 | 374 |
 | Step Response + PID + TF + CrossAxis + PropWash + DTerm + Bayesian + Verification + Golden Outputs + Stacker + SysID + Placement | 25 | 806 |
 | Header Validation + Constants + Main Utils | 3 | 82 |
 | MSP Protocol & Client | 4 | 196 |
@@ -869,7 +869,7 @@ Hardware error (FC timeout, USB disconnect)
 | Diagnostic | 1 | 12 |
 | License | 1 | 12 |
 | Auto-Updater | 1 | 12 |
-| UI Components + Charts + Contexts | 57 | 848 |
+| UI Components + Charts + Contexts | 57 | 849 |
 | React Hooks + Utils | 18 | 197 |
 | Shared Constants & Utils | 5 | 102 |
 | E2E Workflows (Vitest) | 1 | 31 |

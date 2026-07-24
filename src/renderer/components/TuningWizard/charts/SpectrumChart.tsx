@@ -115,15 +115,15 @@ export function SpectrumChart({ noise, filterSettings, recommendations }: Spectr
 
   // Filter-response overlay: configured gyro/D-term chain attenuation at each
   // chart frequency (right axis), evaluated at cruise throttle for dynamic LPFs
-  const { chartData, hasFilterOverlay, notchRange } = useMemo(() => {
+  const { chartData, hasGyroOverlay, hasDtermOverlay, notchRange } = useMemo(() => {
     if (!filterSettings || data.length === 0) {
-      return { chartData: data, hasFilterOverlay: false, notchRange: null };
+      return { chartData: data, hasGyroOverlay: false, hasDtermOverlay: false, notchRange: null };
     }
     const frequencies = data.map((p) => p.frequency);
     const gyroCurve = computeFilterChainCurve(filterSettings, 'gyro', frequencies);
     const dtermCurve = computeFilterChainCurve(filterSettings, 'dterm', frequencies);
     if (!gyroCurve && !dtermCurve) {
-      return { chartData: data, hasFilterOverlay: false, notchRange: null };
+      return { chartData: data, hasGyroOverlay: false, hasDtermOverlay: false, notchRange: null };
     }
     const merged = data.map((p, i) => ({
       ...p,
@@ -136,8 +136,14 @@ export function SpectrumChart({ noise, filterSettings, recommendations }: Spectr
       filterSettings.dyn_notch_max_hz > filterSettings.dyn_notch_min_hz
         ? { min: filterSettings.dyn_notch_min_hz, max: filterSettings.dyn_notch_max_hz }
         : null;
-    return { chartData: merged, hasFilterOverlay: true, notchRange: range };
+    return {
+      chartData: merged,
+      hasGyroOverlay: gyroCurve !== null,
+      hasDtermOverlay: dtermCurve !== null,
+      notchRange: range,
+    };
   }, [data, filterSettings]);
+  const hasFilterOverlay = hasGyroOverlay || hasDtermOverlay;
 
   const visibleAxes: Axis[] = selectedAxis === 'all' ? ['roll', 'pitch', 'yaw'] : [selectedAxis];
 
@@ -266,8 +272,9 @@ export function SpectrumChart({ noise, filterSettings, recommendations }: Spectr
               />
             ))}
 
-            {/* Configured filter chain response (right axis, attenuation dB) */}
-            {hasFilterOverlay && (
+            {/* Configured filter chain response (right axis, attenuation dB) —
+                each curve renders only when its chain has an active stage */}
+            {hasGyroOverlay && (
               <Line
                 yAxisId="filter"
                 dataKey="gyroFilter"
@@ -279,7 +286,7 @@ export function SpectrumChart({ noise, filterSettings, recommendations }: Spectr
                 name="Gyro filters"
               />
             )}
-            {hasFilterOverlay && (
+            {hasDtermOverlay && (
               <Line
                 yAxisId="filter"
                 dataKey="dtermFilter"
@@ -329,8 +336,12 @@ export function SpectrumChart({ noise, filterSettings, recommendations }: Spectr
       </div>
       {hasFilterOverlay && (
         <div className="spectrum-chart-filter-legend">
-          <span style={{ color: FILTER_CURVE_COLORS.gyro }}>– – Gyro filters</span>
-          <span style={{ color: FILTER_CURVE_COLORS.dterm }}>· · D-term filters</span>
+          {hasGyroOverlay && (
+            <span style={{ color: FILTER_CURVE_COLORS.gyro }}>– – Gyro filters</span>
+          )}
+          {hasDtermOverlay && (
+            <span style={{ color: FILTER_CURVE_COLORS.dterm }}>· · D-term filters</span>
+          )}
           <span className="spectrum-chart-filter-legend-note">
             configured attenuation (right axis; dynamic LPF shown at 50% throttle)
           </span>

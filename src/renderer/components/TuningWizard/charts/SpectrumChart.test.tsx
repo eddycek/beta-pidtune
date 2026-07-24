@@ -158,6 +158,28 @@ describe('SpectrumChart', () => {
     expect(screen.queryByText(/Gyro filters/)).not.toBeInTheDocument();
   });
 
+  it('renders only the gyro curve and legend when D-term filters are disabled', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        filterSettings={{
+          gyro_lpf1_static_hz: 250,
+          gyro_lpf2_static_hz: 0,
+          dterm_lpf1_static_hz: 0,
+          dterm_lpf2_static_hz: 0,
+          dyn_notch_min_hz: 0,
+          dyn_notch_max_hz: 0,
+        }}
+      />
+    );
+
+    // 3 noise lines + gyro filter curve only (no dterm curve)
+    const lines = container.querySelectorAll('.recharts-line');
+    expect(lines.length).toBe(4);
+    expect(screen.getByText(/Gyro filters/)).toBeInTheDocument();
+    expect(screen.queryByText(/D-term filters/)).not.toBeInTheDocument();
+  });
+
   it('skips the notch shading when dyn_notch_count is 0', () => {
     const { container } = render(
       <SpectrumChart

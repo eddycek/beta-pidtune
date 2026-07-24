@@ -53,6 +53,15 @@ describe('getBFCapabilities', () => {
     expect(caps.usesDMax).toBe(true);
     expect(caps.hasChirp).toBe(true);
   });
+
+  it('classic "4.6.0" (what real 2025.12 firmware reports via MSP) also gains d_max + chirp', () => {
+    // BF 2025.12 still reports "4.6.0" in MSP_FC_VERSION — the 4.6 features
+    // must key off the classic version, not the calendar naming
+    const caps = getBFCapabilities('4.6.0');
+    expect(caps.usesDMax).toBe(true);
+    expect(caps.hasChirp).toBe(true);
+    expect(caps.hasTpaLow).toBe(true);
+  });
 });
 
 describe('translateSettingForVersion', () => {
