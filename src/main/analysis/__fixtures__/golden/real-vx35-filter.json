@@ -1,16 +1,28 @@
 {
   "overallLevel": "medium",
   "roll": {
-    "noiseFloorDb": -36.9,
-    "peaks": []
+    "noiseFloorDb": -26.3,
+    "peaks": [
+      {
+        "frequency": 22,
+        "amplitude": 6.3,
+        "type": "unknown"
+      }
+    ]
   },
   "pitch": {
-    "noiseFloorDb": -33,
+    "noiseFloorDb": -21.8,
     "peaks": []
   },
   "yaw": {
-    "noiseFloorDb": -33.4,
-    "peaks": []
+    "noiseFloorDb": -22.9,
+    "peaks": [
+      {
+        "frequency": 185,
+        "amplitude": 6.4,
+        "type": "frame_resonance"
+      }
+    ]
   },
   "segmentsUsed": 5,
   "dataQuality": {

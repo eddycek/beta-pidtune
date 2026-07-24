@@ -99,8 +99,9 @@ const COMPONENTS: ComponentDef[] = [
       if (!source) return undefined;
       return avgNoiseFloor(source);
     },
-    best: -60,
-    worst: -20,
+    // v2 power-spectrum scale (legacy amplitude-scale anchors -60/-20 shifted +10 dB)
+    best: -50,
+    worst: -10,
   },
   {
     label: 'Tracking RMS',

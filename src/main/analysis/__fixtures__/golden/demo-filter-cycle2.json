@@ -1,86 +1,101 @@
 {
   "overallLevel": "medium",
   "roll": {
-    "noiseFloorDb": -39.7,
+    "noiseFloorDb": -29.6,
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 37.4,
-        "type": "frame_resonance"
-      },
-      {
-        "frequency": 320,
-        "amplitude": 29.5,
+        "amplitude": 36.4,
         "type": "motor_harmonic"
       },
       {
-        "frequency": 600,
-        "amplitude": 23,
+        "frequency": 320,
+        "amplitude": 28.5,
         "type": "motor_harmonic"
       },
       {
         "frequency": 45,
-        "amplitude": 21.4,
+        "amplitude": 23.6,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 600,
+        "amplitude": 22.1,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 27,
+        "amplitude": 11.1,
+        "type": "unknown"
+      },
+      {
+        "frequency": 54,
+        "amplitude": 7.5,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 57,
+        "amplitude": 6.3,
+        "type": "motor_harmonic"
+      }
+    ]
+  },
+  "pitch": {
+    "noiseFloorDb": -29.5,
+    "peaks": [
+      {
+        "frequency": 160,
+        "amplitude": 35.9,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 320,
+        "amplitude": 28.1,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 600,
+        "amplitude": 21.9,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 45,
+        "amplitude": 21.5,
         "type": "motor_harmonic"
       },
       {
         "frequency": 27,
         "amplitude": 11.2,
         "type": "unknown"
-      }
-    ]
-  },
-  "pitch": {
-    "noiseFloorDb": -39.5,
-    "peaks": [
-      {
-        "frequency": 160,
-        "amplitude": 36.9,
-        "type": "frame_resonance"
       },
       {
-        "frequency": 320,
-        "amplitude": 29.1,
+        "frequency": 55,
+        "amplitude": 7,
         "type": "motor_harmonic"
-      },
-      {
-        "frequency": 600,
-        "amplitude": 23,
-        "type": "motor_harmonic"
-      },
-      {
-        "frequency": 45,
-        "amplitude": 19.1,
-        "type": "motor_harmonic"
-      },
-      {
-        "frequency": 27,
-        "amplitude": 10.2,
-        "type": "unknown"
       }
     ]
   },
   "yaw": {
-    "noiseFloorDb": -39.7,
+    "noiseFloorDb": -29.6,
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 37.5,
+        "amplitude": 36.6,
         "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 29.2,
+        "amplitude": 28.1,
         "type": "motor_harmonic"
       },
       {
         "frequency": 600,
-        "amplitude": 22.7,
+        "amplitude": 21.5,
         "type": "motor_harmonic"
       },
       {
-        "frequency": 46,
-        "amplitude": 10.5,
+        "frequency": 45,
+        "amplitude": 12.1,
         "type": "motor_harmonic"
       }
     ]

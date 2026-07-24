@@ -232,17 +232,17 @@ export function averageSpectra(spectra: PowerSpectrum[]): PowerSpectrum {
   const numBins = spectra[0].frequencies.length;
   const avgMagnitudes = new Float64Array(numBins);
 
-  // Average in linear domain
+  // Average in the linear power domain (magnitudes are PSD dB)
   for (const s of spectra) {
     for (let i = 0; i < numBins; i++) {
-      avgMagnitudes[i] += Math.pow(10, s.magnitudes[i] / 20);
+      avgMagnitudes[i] += Math.pow(10, s.magnitudes[i] / 10);
     }
   }
 
   const magnitudes = new Float64Array(numBins);
   for (let i = 0; i < numBins; i++) {
     const avg = avgMagnitudes[i] / spectra.length;
-    magnitudes[i] = avg > 1e-12 ? 20 * Math.log10(avg) : -240;
+    magnitudes[i] = avg > 1e-24 ? 10 * Math.log10(avg) : -240;
   }
 
   return { frequencies: spectra[0].frequencies, magnitudes };

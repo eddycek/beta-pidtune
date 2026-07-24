@@ -526,20 +526,20 @@ Works from **any flight data** — no dedicated maneuvers needed. Pioneered by P
 
 ### Noise Floor Scale (FPVPIDlab-Specific)
 
-FPVPIDlab uses its own dB scale based on raw FFT power spectral density, normalized per the analysis window. This is **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently.
+FPVPIDlab uses a **calibrated one-sided power spectrum** (`SPECTRUM_SCALE_VERSION = 2` in `constants.ts`): segments are detrended (mean removed), Hanning-windowed, normalized by coherent window gain ((Σw)²), Welch-averaged in the power domain, and reported as `10·log10(power)` in dB re (deg/s)². Calibration: a sine of amplitude A reads exactly `10·log10(A²/2)` at its bin, independent of FFT size and sample rate; white-noise floors depend only on FFT size (per-bin power ≈ 2σ²/N), not sample rate. The scale sits ≈10 dB above the legacy v1 amplitude-averaged scale and is still **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently. Metrics stored by v1 app versions are ≈10 dB lower than v2 values for the same flight.
 
-| FPVPIDlab dB | Internal Classification | Mapping Rationale |
+| FPVPIDlab dB (v2) | Internal Classification | Mapping Rationale |
 |-----------|----------------------|-------------------|
-| < -50 dB | Very clean | Minimal filtering needed |
-| -50 to -30 dB | Normal | Standard filtering |
-| -30 to -20 dB | Noisy | Lower cutoffs needed |
-| > -20 dB | Very noisy | Aggressive filtering, check hardware |
+| < -40 dB | Very clean | Minimal filtering needed |
+| -40 to -20 dB | Normal | Standard filtering |
+| -20 to -10 dB | Noisy | Lower cutoffs needed |
+| > -10 dB | Very noisy | Aggressive filtering, check hardware |
 
-FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (noisiest)**. These are internal scale endpoints, not community-standard values.
+FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (noisiest)**. These are internal scale endpoints, not community-standard values.
 
-**Size-aware noise classification (`NOISE_LEVEL_BY_SIZE`)**: The only community-anchored row is 5" — the PIDtoolbox convention of −30 dB for a "clean" 5" build (and roughly −10 dB for D-term). All non-5" rows (1": −15/−30, 2.5": −20/−35, 3": −25/−40, 4": −27/−40, 6": −33/−50, 7": −35/−55 high/medium dB) are a **house extrapolation** of that standard — smaller/higher-KV builds get more lenient thresholds, larger/lower-KV builds stricter ones. No published community per-size table exists.
+**Size-aware noise classification (`NOISE_LEVEL_BY_SIZE`)**: The only community-anchored row is 5" — the PIDtoolbox convention of −30 dB (amplitude convention) for a "clean" 5" build, which maps to −20 dB on the v2 scale. All non-5" rows (1": −5/−20, 2.5": −10/−25, 3": −15/−30, 4": −17/−30, 6": −23/−40, 7": −25/−45 high/medium dB) are a **house extrapolation** of that standard — smaller/higher-KV builds get more lenient thresholds, larger/lower-KV builds stricter ones. No published community per-size table exists.
 
-**Mechanical health extreme-noise threshold**: `MechanicalHealthChecker` flags "extreme noise / possible damaged prop" at `max(−20 dB, NOISE_LEVEL_BY_SIZE[size].highDb + 5 dB)` — size-aware so that a healthy 1"/2.5" build (inherently noisy) is not falsely flagged.
+**Mechanical health extreme-noise threshold**: `MechanicalHealthChecker` flags "extreme noise / possible damaged prop" at `max(−10 dB, NOISE_LEVEL_BY_SIZE[size].highDb + 5 dB)` — size-aware so that a healthy 1"/2.5" build (inherently noisy) is not falsely flagged.
 
 ### Peak Detection (FPVPIDlab-Specific)
 
@@ -554,12 +554,12 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (
 
 **Rule 1: Noise-Floor-Based Lowpass Adjustment**
 - Scope: Roll and pitch axes
-- **High noise** (> -30 dB): full-confidence noise-to-cutoff interpolation
-- **Medium noise** (-50 to -30 dB): 20 Hz deadzone, low confidence recommendations (avoids churn)
-- **Low noise** (< -50 dB): recommend raising cutoffs toward latency-optimal values (medium confidence). Clean quads benefit from higher cutoffs that reduce group delay without meaningful noise penalty
-- Linear interpolation from noise floor (dB) to cutoff (Hz):
+- **High noise** (> -20 dB): full-confidence noise-to-cutoff interpolation
+- **Medium noise** (-40 to -20 dB): 20 Hz deadzone, low confidence recommendations (avoids churn)
+- **Low noise** (< -40 dB): recommend raising cutoffs toward latency-optimal values (medium confidence). Clean quads benefit from higher cutoffs that reduce group delay without meaningful noise penalty
+- Linear interpolation from noise floor (dB, v2 scale) to cutoff (Hz):
   ```
-  t = (noiseFloorDb - (-10)) / ((-70) - (-10))
+  t = (noiseFloorDb - 0) / ((-60) - 0)
   target = minHz + t × (maxHz - minHz)
   ```
 - **Safety bounds** (FPVPIDlab-specific, tighter than BF firmware limits):
@@ -574,7 +574,7 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (
   *Rationale*: Gyro LPF1 min of 75 Hz is between BF's "very noisy" (50) and "slightly noisy" (80) — a compromise that prevents excessive phase delay while still allowing aggressive filtering for noisy quads. With RPM filter, bounds widen because RPM handles motor harmonics.
 
 - **Deadzone**: 5 Hz minimum change to trigger recommendation (prevents trivial adjustments)
-- **Propwash safety floor**: If target gyro LPF1 < 100 Hz AND worst noise floor ≤ -15 dB, raise to 100 Hz. This is a **conservative FPVPIDlab house rule** — the BF docs' "avoid below 100 Hz" advice refers to notch filters, and the community D-term lowpass floor is ~80 Hz (Oscar Liang). Bypassed only when noise is extreme (> -15 dB) because filtering takes priority over propwash.
+- **Propwash safety floor**: If target gyro LPF1 < 100 Hz AND worst noise floor ≤ -5 dB (v2 scale), raise to 100 Hz. This is a **conservative FPVPIDlab house rule** — the BF docs' "avoid below 100 Hz" advice refers to notch filters, and the community D-term lowpass floor is ~80 Hz (Oscar Liang). Bypassed only when noise is extreme (> -5 dB) because filtering takes priority over propwash.
 
 **Rule 2: Resonance Peak Mitigation** (notch-aware)
 - Collect peaks ≥12 dB above noise floor on roll and pitch
@@ -596,10 +596,10 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-70 dB (cleanest) to -10 dB (
 - *Rationale*: With RPM handling motor harmonics, the dynamic notch only needs to catch frame resonance — 1 narrow notch suffices on 5"+; small builds keep 2. Community consensus supports simplification (UAV Tech, BF 4.3+ notes); the per-size split and max step are FPVPIDlab house choices.
 
 **Rule 6: LPF2 Recommendations**
-- **Disable gyro LPF2** (F-LPF2-DIS-GYRO): When RPM filter active AND noise floor < -45 dB (`GYRO_LPF2_DISABLE_THRESHOLD_DB`). Reduces filter delay.
-- **Disable D-term LPF2** (F-LPF2-DIS-DTERM): When RPM filter active AND noise floor < -45 dB (`DTERM_LPF2_DISABLE_THRESHOLD_DB`). Reduces D-term latency. RPM filter required as safety net before removing LPF2.
-- **Enable gyro LPF2** (F-LPF2-EN-GYRO): When no RPM filter AND noise floor ≥ -30 dB (noisy). Enables at **250 Hz** (house choice — conservative secondary cutoff below the BF default 500 Hz). Extra filtering protects motors.
-- **Enable D-term LPF2** (F-LPF2-EN-DTERM): When noise floor ≥ -30 dB AND LPF2 currently disabled. Enables at **150 Hz**. Extra D-term protection.
+- **Disable gyro LPF2** (F-LPF2-DIS-GYRO): When RPM filter active AND noise floor < -35 dB (`GYRO_LPF2_DISABLE_THRESHOLD_DB`). Reduces filter delay.
+- **Disable D-term LPF2** (F-LPF2-DIS-DTERM): When RPM filter active AND noise floor < -35 dB (`DTERM_LPF2_DISABLE_THRESHOLD_DB`). Reduces D-term latency. RPM filter required as safety net before removing LPF2.
+- **Enable gyro LPF2** (F-LPF2-EN-GYRO): When no RPM filter AND noise floor ≥ -20 dB (noisy). Enables at **250 Hz** (house choice — conservative secondary cutoff below the BF default 500 Hz). Extra filtering protects motors.
+- **Enable D-term LPF2** (F-LPF2-EN-DTERM): When noise floor ≥ -20 dB AND LPF2 currently disabled. Enables at **150 Hz**. Extra D-term protection.
 - *Rationale*: LPF2 adds significant phase delay — only worth it when noise level justifies it. With RPM filter + clean noise, LPF2 is counterproductive.
 
 **Dynamic Lowpass Rules (F-DLPF-*)** — `DynamicLowpassRecommender`:
@@ -779,7 +779,7 @@ FPVPIDlab adjusts all PID thresholds based on the pilot's declared flight style.
 
 - Throttle-down detection: derivative < -0.3 (normalized) sustained ≥50 ms
 - Analysis window: 400 ms post-drop, FFT in 20-90 Hz band
-- Severity: energy ratio vs full-flight baseline
+- Severity: event band energy ratio vs CLEAN baseline — band energy of contiguous runs outside every drop + post-drop window, weighted by run length; falls back to full flight when no clean run ≥ 1024 samples. A whole-flight baseline would include the prop-wash energy itself, saturating the ratio on aggressive flights
   - < 2× = minimal, 2-5× = moderate, ≥ 5× = severe
 - Minimum 3 events for reliable analysis
 - Dominant frequency: grouped into 5 Hz buckets, most common = dominant
@@ -852,7 +852,7 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 
 | Component | Best Value | Worst Value | Available In |
 |-----------|-----------|-------------|--------------|
-| Noise floor | -60 dB | -20 dB | All modes |
+| Noise floor | -50 dB | -10 dB (v2 scale) | All modes |
 | Tracking RMS | 0 | 0.5 deg/s | PID Tune only |
 | Overshoot | 0% | 50% | All modes |
 | Settling time | 50 ms | 500 ms | PID Tune only |

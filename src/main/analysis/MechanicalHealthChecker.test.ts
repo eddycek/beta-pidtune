@@ -86,20 +86,20 @@ describe('checkMechanicalHealth', () => {
   it('should detect extreme noise on roll axis', () => {
     const data = makeFlightData();
     // Set both axes near extreme to avoid asymmetry false positive
-    const noise = makeNoiseProfile({ rollFloor: -15, pitchFloor: -18 });
+    const noise = makeNoiseProfile({ rollFloor: -5, pitchFloor: -8 });
     const result = checkMechanicalHealth(data, noise);
 
     expect(result.status).toBe('critical');
     const noiseIssues = result.issues.filter((i) => i.type === 'extreme_noise');
     expect(noiseIssues.length).toBeGreaterThanOrEqual(1);
     expect(noiseIssues[0].affectedAxis).toBe('roll');
-    expect(noiseIssues[0].measuredValue).toBe(-15);
+    expect(noiseIssues[0].measuredValue).toBe(-5);
     expect(noiseIssues[0].threshold).toBe(EXTREME_NOISE_FLOOR_DB);
   });
 
   it('should detect extreme noise on multiple axes', () => {
     const data = makeFlightData();
-    const noise = makeNoiseProfile({ rollFloor: -10, pitchFloor: -5 });
+    const noise = makeNoiseProfile({ rollFloor: 0, pitchFloor: 5 });
     const result = checkMechanicalHealth(data, noise);
 
     expect(result.status).toBe('critical');
@@ -188,7 +188,7 @@ describe('checkMechanicalHealth', () => {
         (i) => 0.5 + Math.sin(i * 0.1) * 0.1,
       ],
     });
-    const noise = makeNoiseProfile({ rollFloor: -10, pitchFloor: -42 });
+    const noise = makeNoiseProfile({ rollFloor: 0, pitchFloor: -32 });
     const result = checkMechanicalHealth(data, noise);
 
     expect(result.status).toBe('critical');
@@ -227,65 +227,65 @@ describe('checkMechanicalHealth', () => {
 });
 
 describe('resolveExtremeNoiseThresholdDb (size-aware)', () => {
-  it('returns -20 fallback when size is undefined', () => {
+  it('returns -10 fallback when size is undefined', () => {
     expect(resolveExtremeNoiseThresholdDb(undefined)).toBe(EXTREME_NOISE_FLOOR_DB);
-    expect(resolveExtremeNoiseThresholdDb(undefined)).toBe(-20);
+    expect(resolveExtremeNoiseThresholdDb(undefined)).toBe(-10);
   });
 
-  it('returns -10 for 1" whoops (NOISE_LEVEL_BY_SIZE highDb -15 + 5 margin)', () => {
-    expect(resolveExtremeNoiseThresholdDb('1"')).toBe(-15 + EXTREME_NOISE_MARGIN_DB);
-    expect(resolveExtremeNoiseThresholdDb('1"')).toBe(-10);
+  it('returns 0 for 1" whoops (NOISE_LEVEL_BY_SIZE highDb -5 + 5 margin)', () => {
+    expect(resolveExtremeNoiseThresholdDb('1"')).toBe(-5 + EXTREME_NOISE_MARGIN_DB);
+    expect(resolveExtremeNoiseThresholdDb('1"')).toBe(0);
   });
 
-  it('returns -15 for 2.5" micros', () => {
-    expect(resolveExtremeNoiseThresholdDb('2.5"')).toBe(-15);
+  it('returns -5 for 2.5" micros', () => {
+    expect(resolveExtremeNoiseThresholdDb('2.5"')).toBe(-5);
   });
 
-  it('never relaxes below the -20 dB 5" baseline for larger quads', () => {
-    // 5": max(-20, -30+5) = -20; 7": max(-20, -35+5) = -20
-    expect(resolveExtremeNoiseThresholdDb('5"')).toBe(-20);
-    expect(resolveExtremeNoiseThresholdDb('6"')).toBe(-20);
-    expect(resolveExtremeNoiseThresholdDb('7"')).toBe(-20);
+  it('never relaxes below the -10 dB 5" baseline for larger quads', () => {
+    // 5": max(-10, -20+5) = -10; 7": max(-10, -25+5) = -10
+    expect(resolveExtremeNoiseThresholdDb('5"')).toBe(-10);
+    expect(resolveExtremeNoiseThresholdDb('6"')).toBe(-10);
+    expect(resolveExtremeNoiseThresholdDb('7"')).toBe(-10);
   });
 });
 
 describe('checkMechanicalHealth size-aware extreme noise', () => {
-  it('does NOT flag a -18 dB floor on a 1" whoop (healthy whoop noise level)', () => {
+  it('does NOT flag a -8 dB floor on a 1" whoop (healthy whoop noise level)', () => {
     const data = makeFlightData();
-    const noise = makeNoiseProfile({ rollFloor: -18, pitchFloor: -18, yawFloor: -18 });
+    const noise = makeNoiseProfile({ rollFloor: -8, pitchFloor: -8, yawFloor: -8 });
     const result = checkMechanicalHealth(data, noise, '1"');
 
     expect(result.issues.filter((i) => i.type === 'extreme_noise')).toHaveLength(0);
     expect(result.status).toBe('ok');
   });
 
-  it('DOES flag a -18 dB floor on a 5" quad (above -20 dB threshold)', () => {
+  it('DOES flag a -8 dB floor on a 5" quad (above -10 dB threshold)', () => {
     const data = makeFlightData();
-    const noise = makeNoiseProfile({ rollFloor: -18, pitchFloor: -18, yawFloor: -18 });
+    const noise = makeNoiseProfile({ rollFloor: -8, pitchFloor: -8, yawFloor: -8 });
     const result = checkMechanicalHealth(data, noise, '5"');
 
     const noiseIssues = result.issues.filter((i) => i.type === 'extreme_noise');
     expect(noiseIssues).toHaveLength(3);
     expect(result.status).toBe('critical');
-    expect(noiseIssues[0].threshold).toBe(-20);
+    expect(noiseIssues[0].threshold).toBe(-10);
   });
 
-  it('falls back to the -20 dB threshold when size is undefined', () => {
+  it('falls back to the -10 dB threshold when size is undefined', () => {
     const data = makeFlightData();
-    const noise = makeNoiseProfile({ rollFloor: -18, pitchFloor: -18, yawFloor: -18 });
+    const noise = makeNoiseProfile({ rollFloor: -8, pitchFloor: -8, yawFloor: -8 });
     const result = checkMechanicalHealth(data, noise);
 
     expect(result.issues.filter((i) => i.type === 'extreme_noise')).toHaveLength(3);
     expect(result.status).toBe('critical');
   });
 
-  it('still flags genuinely extreme noise (-5 dB) on a 1" whoop', () => {
+  it('still flags genuinely extreme noise (+5 dB) on a 1" whoop', () => {
     const data = makeFlightData();
-    const noise = makeNoiseProfile({ rollFloor: -5, pitchFloor: -5, yawFloor: -5 });
+    const noise = makeNoiseProfile({ rollFloor: 5, pitchFloor: 5, yawFloor: 5 });
     const result = checkMechanicalHealth(data, noise, '1"');
 
     const noiseIssues = result.issues.filter((i) => i.type === 'extreme_noise');
     expect(noiseIssues).toHaveLength(3);
-    expect(noiseIssues[0].threshold).toBe(-10);
+    expect(noiseIssues[0].threshold).toBe(0);
   });
 });

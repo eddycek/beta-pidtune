@@ -292,68 +292,68 @@ describe('analyzeAxisNoise', () => {
 });
 
 describe('categorizeNoiseLevel', () => {
-  it('should return "high" when noise floor >= -30 dB', () => {
-    const roll = makeAxisProfile(-20);
-    const pitch = makeAxisProfile(-25);
-    const yaw = makeAxisProfile(-15);
+  it('should return "high" when noise floor >= -20 dB', () => {
+    const roll = makeAxisProfile(-10);
+    const pitch = makeAxisProfile(-15);
+    const yaw = makeAxisProfile(-5);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high');
   });
 
-  it('should return "medium" when noise floor >= -50 dB and < -30 dB', () => {
-    const roll = makeAxisProfile(-40);
-    const pitch = makeAxisProfile(-45);
-    const yaw = makeAxisProfile(-10); // yaw ignored for level calc
+  it('should return "medium" when noise floor >= -40 dB and < -20 dB', () => {
+    const roll = makeAxisProfile(-30);
+    const pitch = makeAxisProfile(-35);
+    const yaw = makeAxisProfile(0); // yaw ignored for level calc
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium');
   });
 
-  it('should return "low" when noise floor < -50 dB', () => {
-    const roll = makeAxisProfile(-60);
-    const pitch = makeAxisProfile(-55);
-    const yaw = makeAxisProfile(-30);
+  it('should return "low" when noise floor < -40 dB', () => {
+    const roll = makeAxisProfile(-50);
+    const pitch = makeAxisProfile(-45);
+    const yaw = makeAxisProfile(-20);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('low');
   });
 
   it('should use worst of roll/pitch (not yaw)', () => {
-    const roll = makeAxisProfile(-60);
-    const pitch = makeAxisProfile(-25); // High noise
-    const yaw = makeAxisProfile(-60);
+    const roll = makeAxisProfile(-50);
+    const pitch = makeAxisProfile(-15); // High noise
+    const yaw = makeAxisProfile(-50);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high');
   });
 
   it('should use size-aware thresholds for 4" quad', () => {
-    // -26 dB on 5" = HIGH (> -30), on 4" also HIGH (> -27)
-    // -28 dB on 5" = HIGH (> -30), but on 4" = MEDIUM (threshold is -27)
-    const roll = makeAxisProfile(-28);
-    const pitch = makeAxisProfile(-28);
-    const yaw = makeAxisProfile(-20);
-    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // -28 > -30 → HIGH on 5"
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '4"')).toBe('medium'); // -28 < -27 → MEDIUM on 4"
-  });
-
-  it('should use size-aware thresholds for 7" quad', () => {
-    // -34 dB on 5" = MEDIUM, but on 7" = HIGH (threshold is -35)
-    const roll = makeAxisProfile(-34);
-    const pitch = makeAxisProfile(-34);
-    const yaw = makeAxisProfile(-30);
-    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium'); // 5" default
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '7"')).toBe('high'); // 7" threshold -35
-  });
-
-  it('should use size-aware thresholds for 1" whoop', () => {
-    // -18 dB on 5" = HIGH, but on 1" = MEDIUM (threshold is -15)
+    // -16 dB on 5" = HIGH (> -20), on 4" also HIGH (> -17)
+    // -18 dB on 5" = HIGH (> -20), but on 4" = MEDIUM (threshold is -17)
     const roll = makeAxisProfile(-18);
     const pitch = makeAxisProfile(-18);
     const yaw = makeAxisProfile(-10);
+    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // -18 > -20 → HIGH on 5"
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '4"')).toBe('medium'); // -18 < -17 → MEDIUM on 4"
+  });
+
+  it('should use size-aware thresholds for 7" quad', () => {
+    // -24 dB on 5" = MEDIUM, but on 7" = HIGH (threshold is -25)
+    const roll = makeAxisProfile(-24);
+    const pitch = makeAxisProfile(-24);
+    const yaw = makeAxisProfile(-20);
+    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium'); // 5" default
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '7"')).toBe('high'); // 7" threshold -25
+  });
+
+  it('should use size-aware thresholds for 1" whoop', () => {
+    // -8 dB on 5" = HIGH, but on 1" = MEDIUM (threshold is -5)
+    const roll = makeAxisProfile(-8);
+    const pitch = makeAxisProfile(-8);
+    const yaw = makeAxisProfile(0);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // 5" default
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '1"')).toBe('medium'); // 1" threshold -15
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '1"')).toBe('medium'); // 1" threshold -5
   });
 });
 
 describe('buildNoiseProfile', () => {
   it('should combine axis profiles into a noise profile', () => {
-    const roll = makeAxisProfile(-40);
-    const pitch = makeAxisProfile(-45);
-    const yaw = makeAxisProfile(-35);
+    const roll = makeAxisProfile(-30);
+    const pitch = makeAxisProfile(-35);
+    const yaw = makeAxisProfile(-25);
 
     const profile = buildNoiseProfile(roll, pitch, yaw);
     expect(profile.roll).toBe(roll);
@@ -363,28 +363,28 @@ describe('buildNoiseProfile', () => {
   });
 
   it('should classify exactly-on-boundary noise as the higher tier (inclusive)', () => {
-    // -30 dB is exactly highDb for 5" → should be 'high' (inclusive >=)
-    const exactHigh = makeAxisProfile(-30);
-    const quiet = makeAxisProfile(-60);
+    // -20 dB is exactly highDb for 5" → should be 'high' (inclusive >=)
+    const exactHigh = makeAxisProfile(-20);
+    const quiet = makeAxisProfile(-50);
     expect(buildNoiseProfile(exactHigh, quiet, quiet).overallLevel).toBe('high');
 
-    // -50 dB is exactly mediumDb for 5" → should be 'medium' (inclusive >=)
-    const exactMedium = makeAxisProfile(-50);
+    // -40 dB is exactly mediumDb for 5" → should be 'medium' (inclusive >=)
+    const exactMedium = makeAxisProfile(-40);
     expect(buildNoiseProfile(exactMedium, quiet, quiet).overallLevel).toBe('medium');
 
     // Below mediumDb → 'low'
-    const low = makeAxisProfile(-51);
+    const low = makeAxisProfile(-41);
     expect(buildNoiseProfile(low, quiet, quiet).overallLevel).toBe('low');
   });
 
   it('should pass droneSize through to categorization', () => {
-    const roll = makeAxisProfile(-28);
-    const pitch = makeAxisProfile(-28);
-    const yaw = makeAxisProfile(-20);
+    const roll = makeAxisProfile(-18);
+    const pitch = makeAxisProfile(-18);
+    const yaw = makeAxisProfile(-10);
 
     const profile5 = buildNoiseProfile(roll, pitch, yaw);
     const profile4 = buildNoiseProfile(roll, pitch, yaw, '4"');
-    expect(profile5.overallLevel).toBe('high'); // -28 >= -30 → HIGH on 5"
-    expect(profile4.overallLevel).toBe('medium'); // -28 < -27 → not high on 4", -28 >= -40 → MEDIUM
+    expect(profile5.overallLevel).toBe('high'); // -18 >= -20 → HIGH on 5"
+    expect(profile4.overallLevel).toBe('medium'); // -18 < -17 → not high on 4", -18 >= -30 → MEDIUM
   });
 });

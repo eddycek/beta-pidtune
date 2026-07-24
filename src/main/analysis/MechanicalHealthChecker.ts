@@ -23,11 +23,11 @@ export type { HealthSeverity, MechanicalHealthIssue, MechanicalHealthResult };
 // ---- Constants ----
 
 /** Noise floor above this dB level indicates extreme noise (mechanical issue).
- * Baseline for a 5" quad; smaller quads are naturally noisier, so the effective
- * threshold is derived from NOISE_LEVEL_BY_SIZE (highDb + margin) when the
- * drone size is known — a healthy whoop hovers around -20…-15 dB and must not
- * be flagged as damaged hardware. */
-export const EXTREME_NOISE_FLOOR_DB = -20;
+ * v2 power-spectrum scale. Baseline for a 5" quad; smaller quads are naturally
+ * noisier, so the effective threshold is derived from NOISE_LEVEL_BY_SIZE
+ * (highDb + margin) when the drone size is known — a healthy whoop hovers
+ * around -10…-5 dB on this scale and must not be flagged as damaged hardware. */
+export const EXTREME_NOISE_FLOOR_DB = -10;
 
 /** Margin (dB) above the size's "high noise" classification threshold before
  * noise is considered a mechanical fault rather than just a dirty build. */
