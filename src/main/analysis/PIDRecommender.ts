@@ -1705,6 +1705,27 @@ export function recommendTPA(
     });
   }
 
+  // Rule P-TPA-LOW (BF 4.5+): severe propwash + low-throttle TPA disabled → enable.
+  // During propwash descents the motors sit at low RPM where thrust response is
+  // non-linear; low-throttle TPA attenuates gains there (SupaflyFPV presets
+  // enable tpa_low_always). Gated on firmware support: lowAlways is undefined
+  // when the BBL header lacks the BF 4.5+ field.
+  if (pwSevere && tpaContext.lowAlways === 0) {
+    recs.push({
+      setting: 'tpa_low_always',
+      currentValue: 0,
+      recommendedValue: 1,
+      reason:
+        `Severe prop wash detected (${propWash!.meanSeverity.toFixed(1)}× baseline) and ` +
+        'low-throttle TPA is disabled. Enabling tpa_low_always attenuates PID gains in the ' +
+        'non-linear low-RPM region during descents, reducing prop wash oscillation ' +
+        '(community presets enable this on Betaflight 4.5+).',
+      impact: 'stability',
+      confidence: 'low',
+      ruleId: 'P-TPA-LOW',
+    });
+  }
+
   // ── Size-based TPA rules (skip if propwash already covered the same setting) ──
 
   // Rule P-TPA-RATE: TPA rate advisory based on drone size

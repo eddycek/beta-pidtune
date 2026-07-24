@@ -3776,3 +3776,35 @@ describe('recommendVbatSagCompensation', () => {
     expect(rec!.recommendedValue).toBe(75);
   });
 });
+
+describe('P-TPA-LOW (BF 4.5+ low-throttle TPA, P2.5)', () => {
+  const severePropWash = makePropWash({ meanSeverity: 6.0 });
+
+  it('recommends enabling tpa_low_always on severe propwash when supported and off', () => {
+    const ctx: TPAContext = { active: true, rate: 65, breakpoint: 1350, mode: 0, lowAlways: 0 };
+    const recs = recommendTPA(ctx, '5"', undefined, severePropWash);
+    const rec = recs.find((r) => r.ruleId === 'P-TPA-LOW');
+    expect(rec).toBeDefined();
+    expect(rec!.setting).toBe('tpa_low_always');
+    expect(rec!.recommendedValue).toBe(1);
+    expect(rec!.confidence).toBe('low');
+  });
+
+  it('does not fire when the firmware lacks low-throttle TPA (field undefined)', () => {
+    const ctx: TPAContext = { active: true, rate: 65, breakpoint: 1350, mode: 0 };
+    const recs = recommendTPA(ctx, '5"', undefined, severePropWash);
+    expect(recs.find((r) => r.ruleId === 'P-TPA-LOW')).toBeUndefined();
+  });
+
+  it('does not fire when tpa_low_always is already enabled', () => {
+    const ctx: TPAContext = { active: true, rate: 65, breakpoint: 1350, mode: 0, lowAlways: 1 };
+    const recs = recommendTPA(ctx, '5"', undefined, severePropWash);
+    expect(recs.find((r) => r.ruleId === 'P-TPA-LOW')).toBeUndefined();
+  });
+
+  it('does not fire without severe propwash', () => {
+    const ctx: TPAContext = { active: true, rate: 65, breakpoint: 1350, mode: 0, lowAlways: 0 };
+    const recs = recommendTPA(ctx, '5"', undefined, makePropWash({ meanSeverity: 1.5 }));
+    expect(recs.find((r) => r.ruleId === 'P-TPA-LOW')).toBeUndefined();
+  });
+});

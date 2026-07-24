@@ -68,6 +68,8 @@ Entry point: `src/main/index.ts`. Manages MSPClient, ProfileManager, SnapshotMan
 
 **Important**: MSP commands must execute before CLI mode (FC only processes CLI in CLI mode → MSP timeouts).
 
+**Version-capabilities layer (P2.5)**: `src/shared/utils/bfVersionCapabilities.ts` maps the firmware version (semver, or calendar 2025.12+ = BF 4.6) to feature availability (`hasTpaLow`/`hasRpmWeights`/`hasAntiGravityCutoff` 4.5+, `usesDMax`/`hasChirp` 4.6+). The apply flow translates renamed CLI settings via `translateSettingForVersion()` (d_min_gain→d_max_gain etc. on 4.6+) using the cached FCInfo version; `AppliedChange` records keep the canonical pre-rename name (MSP read-back verification is layout-based, unaffected by CLI names). Unknown versions get the conservative 4.3 baseline.
+
 **Auto-Snapshot Strategy** (2 per tuning cycle):
 - `Pre-tuning #N (Type)` — created by Start Tuning (rollback safety net)
 - `Post-tuning #N (Type)` — created on reconnect after PID/Quick apply (final tuned result)
