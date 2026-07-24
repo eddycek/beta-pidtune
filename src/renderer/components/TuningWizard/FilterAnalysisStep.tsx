@@ -197,7 +197,7 @@ export function FilterAnalysisStep({
               Peak marker
             </span>
           </p>
-          <SpectrumChart noise={filterResult.noise} />
+          <SpectrumChart noise={filterResult.noise} filterSettings={filterResult.filterSettings} />
           <div className="axis-summary">
             {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
               const profile = filterResult.noise[axis];
@@ -234,7 +234,10 @@ export function FilterAnalysisStep({
           <div className="noise-details">
             <h4 className="chart-title">Throttle Spectrogram</h4>
             <p className="chart-description">{CHART_DESCRIPTIONS.throttleSpectrogram}</p>
-            <ThrottleSpectrogramChart data={filterResult.throttleSpectrogram} />
+            <ThrottleSpectrogramChart
+              data={filterResult.throttleSpectrogram}
+              filterSettings={filterResult.filterSettings}
+            />
           </div>
         )}
 

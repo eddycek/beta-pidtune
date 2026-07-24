@@ -11,6 +11,18 @@
   overflow-x: auto;
 }
 
+.spectrum-chart-filter-legend {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 8px 0;
+  font-size: 11px;
+}
+
+.spectrum-chart-filter-legend-note {
+  color: var(--text-secondary, #888);
+}
+
 .spectrum-chart-empty {
   padding: 24px;
   text-align: center;

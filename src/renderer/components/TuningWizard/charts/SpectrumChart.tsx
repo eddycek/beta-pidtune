@@ -8,15 +8,22 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
 } from 'recharts';
 import { AxisTabs, type AxisSelection } from './AxisTabs';
 import { spectrumToRechartsData, downsampleData, AXIS_COLORS, type Axis } from './chartUtils';
-import type { NoiseProfile, NoisePeak } from '@shared/types/analysis.types';
+import { computeFilterChainCurve, FILTER_RESPONSE_FLOOR_DB } from '@shared/utils/filterResponse';
+import type { NoiseProfile, NoisePeak, CurrentFilterSettings } from '@shared/types/analysis.types';
 import './SpectrumChart.css';
 
 interface SpectrumChartProps {
   noise: NoiseProfile;
+  /** When provided, the configured gyro/D-term filter response is overlaid
+   * (right axis, attenuation dB) together with the dynamic notch range. */
+  filterSettings?: CurrentFilterSettings;
 }
+
+const FILTER_CURVE_COLORS = { gyro: '#63e6be', dterm: '#e599f7' } as const;
 
 const MAX_CHART_POINTS = 500;
 const MIN_WIDTH = 700;
@@ -44,7 +51,7 @@ const DB_TOP_PADDING = 5;
 /** Padding beyond the last significant frequency as fraction of visible range */
 const FREQ_PADDING_RATIO = 0.05;
 
-export function SpectrumChart({ noise }: SpectrumChartProps) {
+export function SpectrumChart({ noise, filterSettings }: SpectrumChartProps) {
   const [selectedAxis, setSelectedAxis] = useState<AxisSelection>('all');
 
   // Compute data, domains, and filter to significant range in one pass
@@ -95,6 +102,32 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
     };
   }, [noise]);
 
+  // Filter-response overlay: configured gyro/D-term chain attenuation at each
+  // chart frequency (right axis), evaluated at cruise throttle for dynamic LPFs
+  const { chartData, hasFilterOverlay, notchRange } = useMemo(() => {
+    if (!filterSettings || data.length === 0) {
+      return { chartData: data, hasFilterOverlay: false, notchRange: null };
+    }
+    const frequencies = data.map((p) => p.frequency);
+    const gyroCurve = computeFilterChainCurve(filterSettings, 'gyro', frequencies);
+    const dtermCurve = computeFilterChainCurve(filterSettings, 'dterm', frequencies);
+    if (!gyroCurve && !dtermCurve) {
+      return { chartData: data, hasFilterOverlay: false, notchRange: null };
+    }
+    const merged = data.map((p, i) => ({
+      ...p,
+      ...(gyroCurve ? { gyroFilter: gyroCurve[i] } : {}),
+      ...(dtermCurve ? { dtermFilter: dtermCurve[i] } : {}),
+    }));
+    const range =
+      (filterSettings.dyn_notch_count ?? 0) !== 0 &&
+      filterSettings.dyn_notch_min_hz > 0 &&
+      filterSettings.dyn_notch_max_hz > filterSettings.dyn_notch_min_hz
+        ? { min: filterSettings.dyn_notch_min_hz, max: filterSettings.dyn_notch_max_hz }
+        : null;
+    return { chartData: merged, hasFilterOverlay: true, notchRange: range };
+  }, [data, filterSettings]);
+
   const visibleAxes: Axis[] = selectedAxis === 'all' ? ['roll', 'pitch', 'yaw'] : [selectedAxis];
 
   // Collect peaks for visible axes
@@ -120,7 +153,7 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
       <AxisTabs selected={selectedAxis} onChange={setSelectedAxis} />
       <div className="spectrum-chart-container">
         <ResponsiveContainer width="100%" aspect={ASPECT_RATIO} minHeight={MIN_HEIGHT}>
-          <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis
               dataKey="frequency"
@@ -136,6 +169,7 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
               }}
             />
             <YAxis
+              yAxisId="noise"
               domain={yDomain}
               allowDataOverflow={true}
               tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(0) : '')}
@@ -147,6 +181,22 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
                 style: { fontSize: 11, fill: '#888' },
               }}
             />
+            {hasFilterOverlay && (
+              <YAxis
+                yAxisId="filter"
+                orientation="right"
+                domain={[FILTER_RESPONSE_FLOOR_DB, 3]}
+                allowDataOverflow={true}
+                tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(0) : '')}
+                tick={{ fontSize: 11, fill: '#63e6be' }}
+                label={{
+                  value: 'Filter (dB)',
+                  angle: 90,
+                  position: 'insideRight',
+                  style: { fontSize: 11, fill: '#63e6be' },
+                }}
+              />
+            )}
             <Tooltip
               contentStyle={{
                 background: '#1a1a1a',
@@ -163,9 +213,29 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
               }
             />
 
+            {/* Dynamic notch tracking range (shaded band) */}
+            {notchRange && (
+              <ReferenceArea
+                yAxisId="noise"
+                x1={notchRange.min}
+                x2={notchRange.max}
+                fill="#4dabf7"
+                fillOpacity={0.06}
+                stroke="#4dabf7"
+                strokeOpacity={0.25}
+                strokeDasharray="4 4"
+                label={{
+                  value: 'Dyn notch range',
+                  position: 'insideTopRight',
+                  style: { fontSize: 9, fill: '#4dabf7' },
+                }}
+              />
+            )}
+
             {visibleAxes.map((axis) => (
               <Line
                 key={axis}
+                yAxisId="noise"
                 dataKey={axis}
                 stroke={AXIS_COLORS[axis]}
                 strokeWidth={1.5}
@@ -175,10 +245,37 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
               />
             ))}
 
+            {/* Configured filter chain response (right axis, attenuation dB) */}
+            {hasFilterOverlay && (
+              <Line
+                yAxisId="filter"
+                dataKey="gyroFilter"
+                stroke={FILTER_CURVE_COLORS.gyro}
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                dot={false}
+                isAnimationActive={false}
+                name="Gyro filters"
+              />
+            )}
+            {hasFilterOverlay && (
+              <Line
+                yAxisId="filter"
+                dataKey="dtermFilter"
+                stroke={FILTER_CURVE_COLORS.dterm}
+                strokeWidth={1.5}
+                strokeDasharray="2 3"
+                dot={false}
+                isAnimationActive={false}
+                name="D-term filters"
+              />
+            )}
+
             {/* Noise floor reference lines */}
             {noiseFloors.map(({ axis, value }) => (
               <ReferenceLine
                 key={`floor-${axis}`}
+                yAxisId="noise"
                 y={value}
                 stroke={AXIS_COLORS[axis]}
                 strokeDasharray="5 5"
@@ -190,6 +287,7 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
             {visiblePeaks.map((peak, i) => (
               <ReferenceLine
                 key={`peak-${peak.axis}-${i}`}
+                yAxisId="noise"
                 x={peak.frequency}
                 stroke={PEAK_COLORS[peak.type] || '#aaa'}
                 strokeDasharray="3 3"
@@ -204,6 +302,15 @@ export function SpectrumChart({ noise }: SpectrumChartProps) {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      {hasFilterOverlay && (
+        <div className="spectrum-chart-filter-legend">
+          <span style={{ color: FILTER_CURVE_COLORS.gyro }}>– – Gyro filters</span>
+          <span style={{ color: FILTER_CURVE_COLORS.dterm }}>· · D-term filters</span>
+          <span className="spectrum-chart-filter-legend-note">
+            configured attenuation (right axis; dynamic LPF shown at 50% throttle)
+          </span>
+        </div>
+      )}
     </div>
   );
 }

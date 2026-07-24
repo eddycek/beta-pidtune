@@ -43,11 +43,11 @@ Key components:
 
 Interactive visualization using Recharts (SVG).
 
-- **SpectrumChart**: FFT noise spectrum with per-axis color coding, noise floor reference lines, peak frequency markers
+- **SpectrumChart**: FFT noise spectrum with per-axis color coding, noise floor reference lines, peak frequency markers. Optional `filterSettings` prop overlays the configured gyro/D-term filter-chain response (right axis, attenuation dB; models from `@shared/utils/filterResponse`) and shades the dynamic notch range
 - **StepResponseChart**: Setpoint vs gyro trace for individual steps, Prev/Next navigation, metrics overlay
 - **TFStepResponseChart**: Synthetic step response from Transfer Function (Wiener deconvolution). Single/comparison modes
 - **BodePlot**: Frequency response visualization (magnitude + phase). Used in AnalysisOverview and analysis steps
-- **ThrottleSpectrogramChart**: Custom SVG heatmap — noise magnitude (dB) across frequency × throttle bands. Accepts both live `data` and `compactData` props
+- **ThrottleSpectrogramChart**: Custom SVG heatmap — noise magnitude (dB) across frequency × throttle bands. Accepts both live `data` and `compactData` props. Optional `filterSettings` prop overlays the gyro LPF1 cutoff line (dynamic LPF traces its throttle curve across bands)
 - **AxisTabs**: Shared tab selector (Roll/Pitch/Yaw/All). Supports `showAll` prop for spectrogram views
 - **chartUtils**: Data conversion (Float64Array → Recharts format), downsampling, findBestStep scoring
 - **StepResponseTrace**: Raw trace data extracted in `StepMetrics.computeStepResponse()`

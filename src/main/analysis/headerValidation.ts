@@ -226,6 +226,17 @@ export function enrichSettingsFromBBLHeaders(
     }
   }
 
+  if (enriched.gyro_lpf1_dyn_expo === undefined) {
+    const gyroExpoStr = rawHeaders.get('gyro_lpf1_dyn_expo');
+    if (gyroExpoStr !== undefined) {
+      const gyroExpo = parseInt(gyroExpoStr, 10);
+      if (!isNaN(gyroExpo)) {
+        enriched.gyro_lpf1_dyn_expo = gyroExpo;
+        changed = true;
+      }
+    }
+  }
+
   if (enriched.dterm_lpf1_dyn_expo === undefined) {
     const expoStr = rawHeaders.get('dterm_lpf1_dyn_expo');
     if (expoStr !== undefined) {

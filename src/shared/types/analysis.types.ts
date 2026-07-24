@@ -222,6 +222,9 @@ export interface FilterAnalysisResult {
   mechanicalHealth?: MechanicalHealthResult;
   /** Dynamic lowpass analysis (throttle-dependent noise) */
   dynamicLowpass?: DynamicLowpassAnalysis;
+  /** Filter settings the analysis ran against (post BBL-header enrichment) —
+   * lets the renderer overlay the configured filter response on spectra */
+  filterSettings?: CurrentFilterSettings;
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
 }
@@ -346,6 +349,8 @@ export interface CurrentFilterSettings {
   dterm_lpf1_dyn_max_hz?: number;
   /** D-term LPF1 dynamic expo (0-10, controls how aggressively dynamic LPF tracks throttle) */
   dterm_lpf1_dyn_expo?: number;
+  /** Gyro LPF1 dynamic expo (0-10, BF default 5). From BBL header. */
+  gyro_lpf1_dyn_expo?: number;
 
   /** Gyro LPF1 filter type: 0=PT1, 1=BIQUAD, 2=PT2, 3=PT3 */
   gyro_lpf1_type?: number;

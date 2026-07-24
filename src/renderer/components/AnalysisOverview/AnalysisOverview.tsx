@@ -328,7 +328,10 @@ export function AnalysisOverview({ logId, logName, onExit }: AnalysisOverviewPro
                 Peak marker
               </span>
             </p>
-            <SpectrumChart noise={overview.filterResult.noise} />
+            <SpectrumChart
+              noise={overview.filterResult.noise}
+              filterSettings={overview.filterResult.filterSettings}
+            />
             <div className="axis-summary">
               {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
                 const profile = overview.filterResult!.noise[axis];
@@ -366,7 +369,10 @@ export function AnalysisOverview({ logId, logName, onExit }: AnalysisOverviewPro
               <div style={{ marginTop: 16 }}>
                 <h4 className="chart-title">Throttle Spectrogram</h4>
                 <p className="chart-description">{CHART_DESCRIPTIONS.throttleSpectrogram}</p>
-                <ThrottleSpectrogramChart data={overview.filterResult.throttleSpectrogram} />
+                <ThrottleSpectrogramChart
+                  data={overview.filterResult.throttleSpectrogram}
+                  filterSettings={overview.filterResult.filterSettings}
+                />
               </div>
             )}
         </div>

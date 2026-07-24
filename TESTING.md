@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3278 unit tests across 149 files (3255 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3301 unit tests across 150 files (3278 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -203,7 +203,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `TuningWizard/SessionSelectStep.test.tsx` | 8 | Session picker, auto-parse, parsing/error/empty states, reverse order |
 | `TuningWizard/TuningSummaryStep.test.tsx` | 17 | Recommendations table, mode-aware labels (filter/pid/quick), apply/progress/success/error states, tfResult for quick mode |
 | `TuningWizard/charts/AxisTabs.test.tsx` | 6 | Tab rendering, selection, aria-selected, onChange callback |
-| `TuningWizard/charts/ThrottleSpectrogramChart.test.tsx` | 10 | Throttle spectrogram heatmap rendering, axis labels, color scale, empty state, compact data (archived) rendering |
+| `TuningWizard/charts/ThrottleSpectrogramChart.test.tsx` | 12 | Throttle spectrogram heatmap rendering, axis labels, color scale, empty state, compact data (archived) rendering, gyro LPF1 cutoff overlay (rendered/disabled/out-of-range) |
 | `TuningHistory/AppliedChangesTable.test.tsx` | 7 | Setting changes table, percent formatting, empty state, zero value handling |
 | `TuningHistory/NoiseComparisonChart.test.tsx` | 9 | Before/after spectrum overlay, delta pill, axis tabs, empty state |
 | `TuningHistory/TuningCompletionSummary.test.tsx` | 27 | Completion summary with/without verification, noise chart, spectrogram comparison (Filter Tune), step response comparison (PID Tune), changes, PID metrics, actions, quality score badge with tier label, re-analyze button, mode-aware titles, smart suggestion buttons, convergence banner, iteration warning, previous session reference display |
@@ -231,7 +231,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | File | Tests | Description |
 |------|-------|-------------|
 | `TuningWizard/charts/chartUtils.test.ts` | 20 | Data conversion, downsampling, findBestStep, robust Y domain |
-| `TuningWizard/charts/SpectrumChart.test.tsx` | 5 | FFT spectrum chart rendering |
+| `TuningWizard/charts/SpectrumChart.test.tsx` | 8 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0) |
 | `TuningWizard/charts/StepResponseChart.test.tsx` | 10 | Step response chart rendering, navigation |
 | `TuningWizard/charts/BodePlot.test.tsx` | 4 | Bode plot (magnitude + phase) rendering for transfer function |
 | `TuningWizard/charts/TFStepResponseChart.test.tsx` | 6 | TF synthetic step response chart, single/comparison modes, overshoot metrics, delta pill |
@@ -366,6 +366,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 23 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking, contiguous-run gating (findContiguousRuns, min 512 samples, length-weighted power average) |
 | `analysis/GroupDelayEstimator.test.ts` | 28 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default) |
 | `analysis/RpmFilterRecommender.test.ts` | 18 | RPM filter tuning rules: min_hz from dynamic-idle floor (gap/waste directions, deadzone, clamping), min_hz from measured fundamental track (lower-only), harmonic-count increase from integer-ratio tracks (tolerance, amplitude threshold, max cap), fade-range and weights advisories, cross-axis dedup |
+| `shared/utils/filterResponse.test.ts` | 18 | Filter magnitude models: PT1/PT2/PT3 −3 dB at cutoff (BF cutoff corrections), Butterworth biquad rolloff, notch depth/transparency, type dispatch, BF dynamic-LPF throttle curve (linear/expo/clamping), chain combination (dB summing, disabled stages, throttle evaluation, display floor), gyro LPF1 cutoff-at-throttle |
 
 ### Step Response Analysis
 

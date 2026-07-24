@@ -231,6 +231,7 @@ export async function analyze(
     windDisturbance,
     mechanicalHealth,
     dynamicLowpass,
+    filterSettings: currentSettings,
   };
 }
 
@@ -336,6 +337,7 @@ async function analyzeEntireFlight(
     windDisturbance,
     mechanicalHealth,
     dynamicLowpass,
+    filterSettings: currentSettings,
   };
 }
 

@@ -45,9 +45,21 @@ const mockNoise: NoiseProfile = {
 };
 
 const emptyNoise: NoiseProfile = {
-  roll: { spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) }, noiseFloorDb: -40, peaks: [] },
-  pitch: { spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) }, noiseFloorDb: -40, peaks: [] },
-  yaw: { spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) }, noiseFloorDb: -40, peaks: [] },
+  roll: {
+    spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) },
+    noiseFloorDb: -40,
+    peaks: [],
+  },
+  pitch: {
+    spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) },
+    noiseFloorDb: -40,
+    peaks: [],
+  },
+  yaw: {
+    spectrum: { frequencies: new Float64Array([]), magnitudes: new Float64Array([]) },
+    noiseFloorDb: -40,
+    peaks: [],
+  },
   overallLevel: 'low',
 };
 
@@ -100,4 +112,70 @@ describe('SpectrumChart', () => {
     expect(refLines.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('overlays filter response curves when filterSettings provided', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        filterSettings={{
+          gyro_lpf1_static_hz: 250,
+          gyro_lpf2_static_hz: 500,
+          dterm_lpf1_static_hz: 150,
+          dterm_lpf2_static_hz: 150,
+          dyn_notch_min_hz: 100,
+          dyn_notch_max_hz: 600,
+          dyn_notch_count: 3,
+        }}
+      />
+    );
+
+    // 3 noise lines + gyro filter curve + dterm filter curve
+    const lines = container.querySelectorAll('.recharts-line');
+    expect(lines.length).toBe(5);
+    // Legend describing the overlay
+    expect(screen.getByText(/Gyro filters/)).toBeInTheDocument();
+    expect(screen.getByText(/D-term filters/)).toBeInTheDocument();
+    // Dynamic notch range shading
+    expect(container.querySelector('.recharts-reference-area')).toBeTruthy();
+  });
+
+  it('renders no overlay when all filters are disabled', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        filterSettings={{
+          gyro_lpf1_static_hz: 0,
+          gyro_lpf2_static_hz: 0,
+          dterm_lpf1_static_hz: 0,
+          dterm_lpf2_static_hz: 0,
+          dyn_notch_min_hz: 0,
+          dyn_notch_max_hz: 0,
+        }}
+      />
+    );
+
+    const lines = container.querySelectorAll('.recharts-line');
+    expect(lines.length).toBe(3);
+    expect(screen.queryByText(/Gyro filters/)).not.toBeInTheDocument();
+  });
+
+  it('skips the notch shading when dyn_notch_count is 0', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        filterSettings={{
+          gyro_lpf1_static_hz: 250,
+          gyro_lpf2_static_hz: 0,
+          dterm_lpf1_static_hz: 150,
+          dterm_lpf2_static_hz: 0,
+          dyn_notch_min_hz: 100,
+          dyn_notch_max_hz: 600,
+          dyn_notch_count: 0,
+        }}
+      />
+    );
+
+    expect(container.querySelector('.recharts-reference-area')).toBeFalsy();
+    // Filter curves still render
+    expect(screen.getByText(/Gyro filters/)).toBeInTheDocument();
+  });
 });

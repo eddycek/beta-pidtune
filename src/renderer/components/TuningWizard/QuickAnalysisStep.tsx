@@ -110,7 +110,10 @@ export function QuickAnalysisStep({
                     <span className="chart-legend-line chart-legend-line--dashed" /> Noise floor
                   </span>
                 </p>
-                <SpectrumChart noise={filterResult.noise} />
+                <SpectrumChart
+                  noise={filterResult.noise}
+                  filterSettings={filterResult.filterSettings}
+                />
                 <div className="axis-summary">
                   {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
                     const profile = filterResult.noise[axis];

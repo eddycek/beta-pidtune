@@ -7,8 +7,12 @@ import {
   type Axis,
   type HeatmapCell,
 } from '../../../utils/spectrogramUtils';
-import type { ThrottleSpectrogramResult } from '@shared/types/analysis.types';
+import type {
+  ThrottleSpectrogramResult,
+  CurrentFilterSettings,
+} from '@shared/types/analysis.types';
 import type { CompactThrottleSpectrogram } from '@shared/types/tuning-history.types';
+import { gyroLpf1CutoffAtThrottle } from '@shared/utils/filterResponse';
 import './ThrottleSpectrogramChart.css';
 
 interface ThrottleSpectrogramChartProps {
@@ -18,6 +22,9 @@ interface ThrottleSpectrogramChartProps {
   compactData?: CompactThrottleSpectrogram;
   /** When set, axis is controlled externally and local AxisTabs are hidden */
   sharedAxis?: 'roll' | 'pitch' | 'yaw';
+  /** When provided, the gyro LPF1 cutoff is overlaid as a line across throttle
+   * bands (dynamic LPF follows its throttle curve; static is a vertical line) */
+  filterSettings?: CurrentFilterSettings;
 }
 
 const CHART_HEIGHT = 300;
@@ -34,6 +41,7 @@ export function ThrottleSpectrogramChart({
   data,
   compactData,
   sharedAxis,
+  filterSettings,
 }: ThrottleSpectrogramChartProps) {
   const [localAxis, setLocalAxis] = useState<AxisSelection>('roll');
   const [tooltip, setTooltip] = useState<{
@@ -180,6 +188,40 @@ export function ThrottleSpectrogramChart({
             >
               Throttle
             </text>
+
+            {/* Gyro LPF1 cutoff overlay — dynamic LPF traces its throttle curve */}
+            {filterSettings &&
+              (() => {
+                const points: string[] = [];
+                for (let i = 0; i < numBands; i++) {
+                  const band = heatmap.bands[i];
+                  const cutoff = gyroLpf1CutoffAtThrottle(
+                    filterSettings,
+                    (band.min + band.max) / 2
+                  );
+                  if (cutoff === null || cutoff > maxFreq) continue;
+                  const x = (cutoff / maxFreq) * heatmapWidth;
+                  const y = (numBands - 1 - i) * cellHeight + cellHeight / 2;
+                  points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+                }
+                if (points.length < 2) return null;
+                const [labelX, labelY] = points[points.length - 1].split(',').map(Number);
+                return (
+                  <g pointerEvents="none">
+                    <polyline
+                      points={points.join(' ')}
+                      fill="none"
+                      stroke="#63e6be"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      opacity={0.9}
+                    />
+                    <text x={labelX + 6} y={labelY} fontSize={10} fill="#63e6be">
+                      Gyro LPF1
+                    </text>
+                  </g>
+                );
+              })()}
 
             {/* Colorbar */}
             <rect
