@@ -378,8 +378,10 @@ export async function verifyAppliedConfig(
       }
       const act = ffConfig[configKey];
       if (act === undefined) {
-        // Optional field — older firmware/layouts may not report it via MSP
-        unchecked.push(change.setting);
+        // Optional field the firmware's (shorter, pre-1.45) MSP layout does
+        // not report — skip silently, same treatment as FF_CLI_ONLY. Marking
+        // it `unchecked` would flip verified=false and fire a false-positive
+        // auto diagnostic report on every apply on older firmware.
         continue;
       }
       expected[change.setting] = change.newValue;

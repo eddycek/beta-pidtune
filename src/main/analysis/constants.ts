@@ -57,7 +57,8 @@ export const SWEEP_MAX_RESIDUAL = 0.15;
 // ---- Noise Analysis ----
 
 /**
- * Spectrum scale version. v2 = calibrated one-sided power spectrum
+ * Spectrum scale version (re-exported from shared so metric summaries can
+ * stamp it at write time). v2 = calibrated one-sided power spectrum
  * (detrended, Hanning, (Σw)² coherent-gain normalization, power-domain
  * Welch averaging, dB = 10·log10). A sine of amplitude A reads
  * 10·log10(A²/2). Absolute dB thresholds below are calibrated to this
@@ -66,7 +67,7 @@ export const SWEEP_MAX_RESIDUAL = 0.15;
  * community sources. Stored metrics from v1 app versions are not directly
  * comparable to v2 values.
  */
-export const SPECTRUM_SCALE_VERSION = 2;
+export { SPECTRUM_SCALE_VERSION } from '@shared/constants';
 
 /** Peak detection: minimum prominence above local noise floor in dB.
  * Relative (peak vs floor) — identical meaning on the v1 and v2 scales. */

@@ -526,7 +526,7 @@ Works from **any flight data** — no dedicated maneuvers needed. Pioneered by P
 
 ### Noise Floor Scale (FPVPIDlab-Specific)
 
-FPVPIDlab uses a **calibrated one-sided power spectrum** (`SPECTRUM_SCALE_VERSION = 2` in `constants.ts`): segments are detrended (mean removed), Hanning-windowed, normalized by coherent window gain ((Σw)²), Welch-averaged in the power domain, and reported as `10·log10(power)` in dB re (deg/s)². Calibration: a sine of amplitude A reads exactly `10·log10(A²/2)` at its bin, independent of FFT size and sample rate; white-noise floors depend only on FFT size (per-bin power ≈ 2σ²/N), not sample rate. The scale sits ≈10 dB above the legacy v1 amplitude-averaged scale and is still **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently. Metrics stored by v1 app versions are ≈10 dB lower than v2 values for the same flight.
+FPVPIDlab uses a **calibrated one-sided power spectrum** (`SPECTRUM_SCALE_VERSION = 2` in `constants.ts`): segments are detrended (mean removed), Hanning-windowed, normalized by coherent window gain ((Σw)²), Welch-averaged in the power domain, and reported as `10·log10(power)` in dB re (deg/s)². Calibration: a sine of amplitude A reads exactly `10·log10(A²/2)` at its bin, independent of FFT size and sample rate; white-noise floors depend only on FFT size (per-bin power ≈ 2σ²·ENBW/N ≈ 3σ²/N for Hanning), not sample rate. The scale sits ≈10 dB above the legacy v1 amplitude-averaged scale and is still **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently. Metrics stored by v1 app versions are ≈10 dB lower than v2 values for the same flight.
 
 | FPVPIDlab dB (v2) | Internal Classification | Mapping Rationale |
 |-----------|----------------------|-------------------|
@@ -779,7 +779,7 @@ FPVPIDlab adjusts all PID thresholds based on the pilot's declared flight style.
 - Identifies mechanical asymmetry, FC mounting angle, motor thrust differences
 
 ### Prop Wash Detection (FPVPIDlab-Specific)
-
+ (Note: severities stored by app versions with the whole-flight baseline read systematically lower than clean-baseline values — cross-version comparisons of stored propwash severity are not meaningful.)
 - Throttle-down detection: derivative < -0.3 (normalized) sustained ≥50 ms
 - Analysis window: 400 ms post-drop, FFT in 20-90 Hz band
 - Severity: event band energy ratio vs CLEAN baseline — band energy of contiguous runs outside every drop + post-drop window, weighted by run length; falls back to full flight when no clean run ≥ 1024 samples. A whole-flight baseline would include the prop-wash energy itself, saturating the ratio on aggressive flights

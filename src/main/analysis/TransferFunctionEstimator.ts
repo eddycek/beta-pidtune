@@ -42,7 +42,7 @@ const DC_REFERENCE_MAX_HZ = 5;
 const SETTLING_TOLERANCE = 0.02;
 
 /** Upper bound of the band used for the mean-coherence summary (Hz).
- * Stick input carries energy roughly 0.5-40 Hz; coherence above that band
+ * Stick input carries most energy below ~40 Hz; the mean uses 1-30 Hz (bin 0 excluded, see DC_REFERENCE notes) — coherence above that band
  * reflects noise, not tracking, and would dilute the mean. */
 const COHERENCE_BAND_MAX_HZ = 30;
 

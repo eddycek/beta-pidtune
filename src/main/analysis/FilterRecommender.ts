@@ -730,8 +730,18 @@ function recommendDynamicNotchForRPM(
  */
 function deduplicateRecommendations(recs: FilterRecommendation[]): FilterRecommendation[] {
   const byKey = new Map<string, FilterRecommendation>();
+  // Informational observations pass through unmerged: their currentValue ===
+  // recommendedValue no-op must never replace (or inherit confidence from) a
+  // real recommendation that happens to share the setting name (e.g. the
+  // F-YAW-RES observation vs an actionable F-DN-COUNT reduction). The
+  // renderer already excludes informational/no-op recs from apply.
+  const informational: FilterRecommendation[] = [];
 
   for (const rec of recs) {
+    if (rec.informational) {
+      informational.push(rec);
+      continue;
+    }
     const existing = byKey.get(rec.setting);
     if (!existing) {
       byKey.set(rec.setting, rec);
@@ -760,7 +770,7 @@ function deduplicateRecommendations(recs: FilterRecommendation[]): FilterRecomme
     }
   }
 
-  return Array.from(byKey.values());
+  return [...byKey.values(), ...informational];
 }
 
 /**

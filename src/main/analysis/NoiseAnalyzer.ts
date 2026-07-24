@@ -27,8 +27,9 @@ import {
   MOTOR_HARMONIC_MIN_PEAKS,
 } from './constants';
 
-/** Sentinel value for bins with near-zero magnitude (20*log10(1e-12)) */
-export const DB_SENTINEL = -240;
+/** Sentinel value for bins with near-zero power (10*log10(1e-24)) — re-exported from FFTCompute */
+export { DB_SENTINEL } from './FFTCompute';
+import { DB_SENTINEL, POWER_FLOOR } from './FFTCompute';
 
 /** Minimum valid noise floor — anything below is treated as no-signal */
 const DB_FLOOR_VALID = -100;
@@ -297,7 +298,7 @@ export function averageSpectra(spectra: PowerSpectrum[]): PowerSpectrum {
   const magnitudes = new Float64Array(numBins);
   for (let i = 0; i < numBins; i++) {
     const avg = avgMagnitudes[i] / spectra.length;
-    magnitudes[i] = avg > 1e-24 ? 10 * Math.log10(avg) : -240;
+    magnitudes[i] = avg > POWER_FLOOR ? 10 * Math.log10(avg) : DB_SENTINEL;
   }
 
   return { frequencies: spectra[0].frequencies, magnitudes };

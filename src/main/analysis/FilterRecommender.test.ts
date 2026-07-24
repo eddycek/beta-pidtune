@@ -1646,3 +1646,33 @@ describe('yaw-only resonance observation (F-YAW-RES)', () => {
     expect(recs.find((r) => r.ruleId === 'F-YAW-RES')).toBeUndefined();
   });
 });
+
+describe('deduplication vs informational observations', () => {
+  it('F-YAW-RES no-op must not swallow an actionable F-DN-COUNT reduction', () => {
+    // RPM active on a 5" → F-DN-COUNT wants count 3→1; yaw-only peak outside
+    // notch range → F-YAW-RES emits an informational no-op on the same setting
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 700, amplitude: 15, type: 'electrical' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      rpm_filter_harmonics: 3,
+      dyn_notch_count: 3,
+      dyn_notch_max_hz: 600, // 700 Hz yaw peak is outside
+    };
+
+    const recs = recommend(noise, current, '5"');
+    const countRecs = recs.filter((r) => r.setting === 'dyn_notch_count');
+    const actionable = countRecs.find((r) => !r.informational);
+    const observation = countRecs.find((r) => r.informational);
+
+    // The actionable reduction must survive dedup with its own value/confidence
+    expect(actionable).toBeDefined();
+    expect(actionable!.recommendedValue).toBeLessThan(3);
+    // The informational observation passes through separately
+    expect(observation).toBeDefined();
+    expect(observation!.recommendedValue).toBe(observation!.currentValue);
+    expect(observation!.confidence).toBe('low');
+  });
+});

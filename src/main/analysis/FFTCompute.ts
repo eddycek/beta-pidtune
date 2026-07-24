@@ -10,7 +10,7 @@
  * averaging happens in the power domain. Calibration: a sine of amplitude
  * A reads exactly 10·log10(A²/2) at its bin, independent of window size
  * and sample rate. White-noise floors depend only on the FFT size
- * (per-bin power = 2σ²/N), not the sample rate, so dB thresholds remain
+ * (per-bin power ≈ 2σ²·ENBW/N ≈ 3σ²/N for Hanning), not the sample rate, so dB thresholds remain
  * comparable across logging rates.
  */
 import FFT from 'fft.js';
@@ -18,10 +18,10 @@ import type { PowerSpectrum } from '@shared/types/analysis.types';
 import { FFT_WINDOW_SIZE, FFT_OVERLAP, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ } from './constants';
 
 /** Sentinel dB value for bins with near-zero power (10*log10(1e-24)) */
-const DB_SENTINEL = -240;
+export const DB_SENTINEL = -240;
 
 /** Power floor below which a bin is reported as the sentinel */
-const POWER_FLOOR = 1e-24;
+export const POWER_FLOOR = 1e-24;
 
 /**
  * Apply a Hanning window to a signal segment.

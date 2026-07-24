@@ -18,6 +18,7 @@ import type {
   TransferFunctionMetricsSummary,
 } from '../types/tuning-history.types';
 import type { ThrottleSpectrogramResult } from '../types/analysis.types';
+import { SPECTRUM_SCALE_VERSION } from '../constants';
 
 /**
  * Downsample a full-resolution FFT spectrum to a fixed number of bins.
@@ -213,6 +214,7 @@ export function extractFilterMetrics(result: FilterAnalysisResult): FilterMetric
 
   return {
     noiseLevel: result.noise.overallLevel,
+    spectrumScaleVersion: SPECTRUM_SCALE_VERSION,
     roll: {
       noiseFloorDb: round2(result.noise.roll.noiseFloorDb),
       peakCount: result.noise.roll.peaks.length,

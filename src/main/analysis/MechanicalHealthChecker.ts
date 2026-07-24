@@ -2,7 +2,7 @@
  * Mechanical health diagnostic module.
  *
  * Pre-tuning check that detects hardware issues before PID analysis:
- * - Extreme noise floor (>-20 dB) — damaged prop, loose motor, vibration
+ * - Extreme noise floor (>-10 dB on the v2 scale, size-aware) — damaged prop, loose motor, vibration
  * - Asymmetric per-axis noise — bent prop, damaged motor, gyro mounting
  * - Abnormal motor output variance — motor imbalance, ESC issues
  *

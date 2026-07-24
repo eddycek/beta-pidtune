@@ -24,6 +24,13 @@ import {
   FILTER_CONVERGENCE_DB as FLASH_NOISE_CONVERGENCE_DB,
 } from './constants';
 
+/** True when two filter summaries were measured on different spectrum scale
+ * versions (absent field = legacy v1). Their dB values differ by ≈10 dB for
+ * the same physical noise and must not be compared directly. */
+function scaleVersionsDiffer(a: FilterMetricsSummary, b: FilterMetricsSummary): boolean {
+  return (a.spectrumScaleVersion ?? 1) !== (b.spectrumScaleVersion ?? 1);
+}
+
 /**
  * Detect filter tuning convergence.
  *
@@ -34,6 +41,22 @@ export function detectFilterConvergence(
   initial: FilterMetricsSummary,
   verification: FilterMetricsSummary
 ): ConvergenceResult {
+  // Cross-scale comparison guard: a v1-stored initial vs a v2 verification
+  // (session spanning an app update) carries a phantom ~+10 dB shift that
+  // would read as a huge regression. Report neutral "continue" instead.
+  if (scaleVersionsDiffer(initial, verification)) {
+    return {
+      status: 'continue',
+      improvementDelta: 0,
+      meaningfulThreshold: FILTER_CONVERGENCE_DB,
+      message:
+        'The two flights were analyzed on different noise-scale versions (app update between ' +
+        'them) — their dB values are not directly comparable. Fly a fresh analysis + ' +
+        'verification pair to measure improvement.',
+      details: [],
+    };
+  }
+
   const details: ConvergenceDetail[] = [];
 
   const axes = ['roll', 'pitch', 'yaw'] as const;
@@ -199,7 +222,6 @@ export function detectFlashConvergence(
 
   for (const axis of axes) {
     const bwDelta = Math.abs(verification[axis].bandwidthHz - initial[axis].bandwidthHz);
-    const pmDelta = Math.abs(verification[axis].phaseMarginDeg - initial[axis].phaseMarginDeg);
 
     details.push({
       metric: `${axis} bandwidth`,
@@ -208,21 +230,35 @@ export function detectFlashConvergence(
       delta: verification[axis].bandwidthHz - initial[axis].bandwidthHz,
       unit: 'Hz',
     });
-    details.push({
-      metric: `${axis} phase margin`,
-      initialValue: initial[axis].phaseMarginDeg,
-      verificationValue: verification[axis].phaseMarginDeg,
-      delta: verification[axis].phaseMarginDeg - initial[axis].phaseMarginDeg,
-      unit: '°',
-    });
-
     maxBwDelta = Math.max(maxBwDelta, bwDelta);
-    maxPmDelta = Math.max(maxPmDelta, pmDelta);
+
+    // Phase margin: only when both sides carry a MEASURED margin. When the
+    // gain never crossed 0 dB, phaseMarginDeg is a 90° placeholder — diffing
+    // it against a measured ~45° would fabricate a ±45° "change".
+    const pmMeasured =
+      initial[axis].phaseMarginCrossingFound !== false &&
+      verification[axis].phaseMarginCrossingFound !== false;
+    if (pmMeasured) {
+      const pmDelta = Math.abs(verification[axis].phaseMarginDeg - initial[axis].phaseMarginDeg);
+      details.push({
+        metric: `${axis} phase margin`,
+        initialValue: initial[axis].phaseMarginDeg,
+        verificationValue: verification[axis].phaseMarginDeg,
+        delta: verification[axis].phaseMarginDeg - initial[axis].phaseMarginDeg,
+        unit: '°',
+      });
+      maxPmDelta = Math.max(maxPmDelta, pmDelta);
+    }
   }
 
-  // Optional noise floor delta
+  // Optional noise floor delta (skip when the two flights were measured on
+  // different spectrum scale versions — dB values are not comparable)
   let noiseConverged = true;
-  if (initialFilter && verificationFilter) {
+  if (
+    initialFilter &&
+    verificationFilter &&
+    !scaleVersionsDiffer(initialFilter, verificationFilter)
+  ) {
     for (const axis of axes) {
       const noiseDelta = Math.abs(
         verificationFilter[axis].noiseFloorDb - initialFilter[axis].noiseFloorDb

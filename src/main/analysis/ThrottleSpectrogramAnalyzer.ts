@@ -15,7 +15,7 @@ import type {
   ThrottleBand,
   PowerSpectrum,
 } from '@shared/types/analysis.types';
-import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
+import { computePowerSpectrum, trimSpectrum, POWER_FLOOR, DB_SENTINEL } from './FFTCompute';
 import { estimateNoiseFloor } from './NoiseAnalyzer';
 import { FFT_WINDOW_SIZE, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ } from './constants';
 
@@ -110,7 +110,7 @@ function averageRunSpectra(
   const magnitudes = new Float64Array(numBins);
   for (let i = 0; i < numBins; i++) {
     const avg = avgPower[i] / totalWeight;
-    magnitudes[i] = avg > 1e-24 ? 10 * Math.log10(avg) : -240;
+    magnitudes[i] = avg > POWER_FLOOR ? 10 * Math.log10(avg) : DB_SENTINEL;
   }
   return { frequencies, magnitudes };
 }

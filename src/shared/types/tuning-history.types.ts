@@ -68,6 +68,10 @@ export interface FilterMetricsSummary {
   windDisturbance?: { level: string; worstVariance: number };
   /** Optional compact throttle spectrogram for heatmap rendering */
   throttleSpectrogram?: CompactThrottleSpectrogram;
+  /** Spectrum scale version the dB values were measured on (see
+   * SPECTRUM_SCALE_VERSION in shared/constants). Absent = legacy v1 scale
+   * (≈10 dB below v2) — not directly comparable to v2 records. */
+  spectrumScaleVersion?: number;
 }
 
 /** Compact per-axis PID step response metrics */
