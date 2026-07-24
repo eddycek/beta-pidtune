@@ -105,7 +105,8 @@
       "currentValue": 1,
       "recommendedValue": 0,
       "ruleId": "P-DMAX-INFO",
-      "confidence": "low"
+      "confidence": "low",
+      "informational": true
     }
   ]
 }

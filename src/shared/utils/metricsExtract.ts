@@ -329,6 +329,7 @@ interface TFMetricsInput {
   settlingTimeMs: number;
   riseTimeMs: number;
   dcGainDb?: number;
+  phaseMarginCrossingFound?: boolean;
 }
 
 /** Throttle-band TF summary input (matches PIDAnalysisResult.throttleTF shape) */
@@ -359,6 +360,9 @@ export function extractTransferFunctionMetrics(
     overshootPercent: round2(m.overshootPercent),
     settlingTimeMs: round2(m.settlingTimeMs),
     riseTimeMs: round2(m.riseTimeMs),
+    ...(m.phaseMarginCrossingFound !== undefined
+      ? { phaseMarginCrossingFound: m.phaseMarginCrossingFound }
+      : {}),
   });
 
   // Extract per-axis DC gain if available

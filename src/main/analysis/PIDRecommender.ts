@@ -1210,7 +1210,8 @@ function applyDMinAdvisory(
       ruleId: 'P-DMAX-INFO',
     });
   } else {
-    // For <=5" and whoops: recommend disabling
+    // For <=5" and whoops: suggest disabling — advisory only. Auto-applying
+    // would silently flip a simplified-tuning slider off; the pilot decides.
     recommendations.push({
       setting: 'simplified_dmax_gain',
       currentValue: 1, // D-max is effectively active
@@ -1221,6 +1222,7 @@ function applyDMinAdvisory(
         'Disabling D-max (simplified_dmax_gain = 0) gives consistent D for faster tune convergence.',
       impact: 'stability',
       confidence: 'low',
+      informational: true,
       ruleId: 'P-DMAX-INFO',
     });
   }

@@ -152,7 +152,11 @@ const COMPONENTS: ComponentDef[] = [
     label: 'Phase Margin',
     getValue: (_filter, _pid, _verification, tf) => {
       if (!tf) return undefined;
-      return (tf.roll.phaseMarginDeg + tf.pitch.phaseMarginDeg + tf.yaw.phaseMarginDeg) / 3;
+      // Only axes with a measured gain crossover count — a capped 90°
+      // placeholder (no crossing found) must not read as "very stable".
+      const axes = [tf.roll, tf.pitch, tf.yaw].filter((a) => a.phaseMarginCrossingFound !== false);
+      if (axes.length === 0) return undefined;
+      return axes.reduce((s, a) => s + a.phaseMarginDeg, 0) / axes.length;
     },
     best: 60, // 60° = very stable system
     worst: 20, // 20° = near instability

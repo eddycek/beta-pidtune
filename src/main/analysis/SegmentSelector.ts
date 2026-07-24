@@ -7,6 +7,7 @@
  *    (preferred for filter analysis: captures noise across full RPM range)
  */
 import type { BlackboxFlightData } from '@shared/types/blackbox.types';
+import { normalizeThrottle } from './throttleUtils';
 import type { FlightSegment } from '@shared/types/analysis.types';
 import {
   THROTTLE_MIN_FLIGHT,
@@ -110,27 +111,6 @@ export function findSteadySegments(flightData: BlackboxFlightData): FlightSegmen
   segments.sort((a, b) => b.durationSeconds - a.durationSeconds);
 
   return segments;
-}
-
-/**
- * Normalize throttle to 0-1 range.
- * Betaflight setpoint throttle is typically 0-1000 or 1000-2000 depending on log version.
- */
-function normalizeThrottle(value: number): number {
-  if (value > 1000) {
-    // 1000-2000 range (RC pulse width)
-    return (value - 1000) / 1000;
-  }
-  if (value > 100) {
-    // 0-1000 range
-    return value / 1000;
-  }
-  if (value > 1) {
-    // 0-100 percentage range
-    return value / 100;
-  }
-  // Already 0-1 range
-  return value;
 }
 
 /**

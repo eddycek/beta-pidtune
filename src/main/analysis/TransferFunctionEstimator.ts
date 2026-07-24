@@ -85,6 +85,12 @@ export interface TransferFunctionMetrics {
   /** Mean magnitude-squared coherence over the 1-30 Hz stick-input band (0-1).
    * Undefined when the log was too short for multi-window Welch averaging. */
   coherenceMean?: number;
+  /** False when the phase never crossed -180° — gainMarginDb is then the 60 dB
+   * cap (an "at least this stable" placeholder), not a measured margin. */
+  gainMarginCrossingFound?: boolean;
+  /** False when the gain never crossed 0 dB — phaseMarginDeg is then the 90°
+   * cap, not a measured margin. */
+  phaseMarginCrossingFound?: boolean;
 }
 
 export interface TransferFunctionResult {
@@ -442,10 +448,14 @@ export function extractMetrics(
   _sampleRateHz: number
 ): TransferFunctionMetrics {
   const coherenceMean = computeCoherenceMean(bode);
+  const gainMargin = computeGainMargin(bode);
+  const phaseMargin = computePhaseMargin(bode);
   return {
     bandwidthHz: computeBandwidth(bode),
-    gainMarginDb: computeGainMargin(bode),
-    phaseMarginDeg: computePhaseMargin(bode),
+    gainMarginDb: gainMargin.valueDb,
+    phaseMarginDeg: phaseMargin.valueDeg,
+    gainMarginCrossingFound: gainMargin.crossingFound,
+    phaseMarginCrossingFound: phaseMargin.crossingFound,
     overshootPercent: computeOvershoot(stepResponse),
     settlingTimeMs: computeSettlingTime(stepResponse),
     riseTimeMs: computeRiseTime(stepResponse),
@@ -501,7 +511,7 @@ function computeBandwidth(bode: BodeResult): number {
  * Compute gain margin: how much gain (in dB) before instability.
  * Found at the frequency where phase crosses -180 degrees.
  */
-function computeGainMargin(bode: BodeResult): number {
+function computeGainMargin(bode: BodeResult): { valueDb: number; crossingFound: boolean } {
   // Find phase crossover frequency (where phase = -180)
   for (let i = 1; i < bode.phase.length; i++) {
     if (bode.phase[i] <= -180 && bode.phase[i - 1] > -180) {
@@ -518,19 +528,20 @@ function computeGainMargin(bode: BodeResult): number {
         bode.magnitude[Math.min(fracIdx + 1, bode.magnitude.length - 1)] * frac;
 
       // Gain margin = -magnitude at phase crossover (positive = stable)
-      return -magAtCrossover;
+      return { valueDb: -magAtCrossover, crossingFound: true };
     }
   }
 
-  // Phase never crosses -180 — infinite gain margin (very stable)
-  return 60; // Cap at reasonable value
+  // Phase never crossed -180 within the analysis band — no measurable margin.
+  // The 60 dB cap is a placeholder; crossingFound=false marks it as unmeasured.
+  return { valueDb: 60, crossingFound: false };
 }
 
 /**
  * Compute phase margin: how much additional phase lag before instability.
  * Found at the frequency where gain crosses 0 dB.
  */
-function computePhaseMargin(bode: BodeResult): number {
+function computePhaseMargin(bode: BodeResult): { valueDeg: number; crossingFound: boolean } {
   // Find gain crossover frequency (where magnitude = 0 dB)
   for (let i = 1; i < bode.magnitude.length; i++) {
     if (bode.magnitude[i] <= 0 && bode.magnitude[i - 1] > 0) {
@@ -547,12 +558,13 @@ function computePhaseMargin(bode: BodeResult): number {
         bode.phase[Math.min(fracIdx + 1, bode.phase.length - 1)] * frac;
 
       // Phase margin = 180 + phase at gain crossover (positive = stable)
-      return 180 + phaseAtCrossover;
+      return { valueDeg: 180 + phaseAtCrossover, crossingFound: true };
     }
   }
 
-  // Gain never crosses 0 dB — infinite phase margin (system always attenuates)
-  return 90; // Cap at reasonable value
+  // Gain never crossed 0 dB within the analysis band — no measurable margin.
+  // The 90° cap is a placeholder; crossingFound=false marks it as unmeasured.
+  return { valueDeg: 90, crossingFound: false };
 }
 
 /**

@@ -120,6 +120,9 @@ export interface AxisTransferFunctionSummary {
   overshootPercent: number;
   settlingTimeMs: number;
   riseTimeMs: number;
+  /** False when the gain never crossed 0 dB — phaseMarginDeg is the 90° cap,
+   * not a measured margin. Absent on records from older app versions. */
+  phaseMarginCrossingFound?: boolean;
 }
 
 /** Downsampled synthetic step response for history chart rendering */

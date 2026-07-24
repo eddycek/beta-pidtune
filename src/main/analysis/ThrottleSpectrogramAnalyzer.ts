@@ -9,6 +9,7 @@
  * - Throttle ranges with worst noise
  */
 import type { BlackboxFlightData } from '@shared/types/blackbox.types';
+import { normalizeThrottle } from './throttleUtils';
 import type {
   ThrottleSpectrogramResult,
   ThrottleBand,
@@ -23,23 +24,6 @@ export const DEFAULT_NUM_BANDS = 10;
 
 /** Minimum samples per band to compute a meaningful spectrum */
 export const MIN_SAMPLES_PER_BAND = 512;
-
-/**
- * Normalize a raw throttle value to 0-1 range.
- * Handles BF raw formats: 1000-2000, 0-1000, 0-100, and 0-1.
- */
-function normalizeThrottle(value: number): number {
-  if (value > 1000) {
-    return (value - 1000) / 1000;
-  }
-  if (value > 100) {
-    return value / 1000;
-  }
-  if (value > 1) {
-    return value / 100;
-  }
-  return value;
-}
 
 /**
  * Bin flight data samples by throttle level and collect gyro indices per band.

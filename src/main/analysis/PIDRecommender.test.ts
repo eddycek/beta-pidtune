@@ -2743,7 +2743,8 @@ describe('D-max gain awareness (P-DMAX-INFO)', () => {
     expect(dmaxRec!.recommendedValue).toBe(0);
     expect(dmaxRec!.confidence).toBe('low');
     expect(dmaxRec!.reason).toContain('unpredictability');
-    expect(dmaxRec!.informational).toBeUndefined();
+    // Advisory only — flipping a simplified-tuning slider must not auto-apply
+    expect(dmaxRec!.informational).toBe(true);
   });
 
   it('should recommend disabling D-max for whoop (1") quads', () => {

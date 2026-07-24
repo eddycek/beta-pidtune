@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   analyzeFeedforward,
+  deriveMaxStickRate,
+  MAX_STICK_RATE_FLOOR,
+  MAX_STICK_RATE_FALLBACK,
   recommendFeedforward,
   recommendRCLinkBaseline,
   mergeFFRecommendations,
@@ -824,5 +827,26 @@ describe('extractRCLinkRate', () => {
   it('should return undefined for zero values', () => {
     const headers = new Map([['rc_smoothing_input_hz', '0']]);
     expect(extractRCLinkRate(headers)).toBeUndefined();
+  });
+});
+
+describe('deriveMaxStickRate', () => {
+  const series = (values: number[]) => ({ values: new Float64Array(values) });
+
+  it('uses the max |setpoint| across roll/pitch/yaw', () => {
+    const setpoint = [series([100, -850, 300]), series([200, 400, -300]), series([50, 0, 25])];
+    expect(deriveMaxStickRate(setpoint)).toBe(850);
+  });
+
+  it('floors gentle flights at MAX_STICK_RATE_FLOOR', () => {
+    const setpoint = [series([10, -40, 30]), series([20, 15, -25]), series([5, 0, 2])];
+    expect(deriveMaxStickRate(setpoint)).toBe(MAX_STICK_RATE_FLOOR);
+  });
+
+  it('falls back to the BF default when no data', () => {
+    expect(deriveMaxStickRate(undefined)).toBe(MAX_STICK_RATE_FALLBACK);
+    expect(deriveMaxStickRate([series([0, 0]), series([0]), series([0])])).toBe(
+      MAX_STICK_RATE_FALLBACK
+    );
   });
 });

@@ -17,6 +17,7 @@
  *    oscillation dominates total energy.
  */
 import type { BlackboxFlightData } from '@shared/types/blackbox.types';
+import { normalizeThrottle } from './throttleUtils';
 import type { PropWashEvent, PropWashAnalysis } from '@shared/types/analysis.types';
 import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
 import {
@@ -29,16 +30,6 @@ import {
   PROPWASH_SEVERITY_SEVERE,
   PROPWASH_MIN_EVENTS,
 } from './constants';
-
-/**
- * Normalize a raw throttle value to 0-1 range.
- */
-function normalizeThrottle(value: number): number {
-  if (value > 1000) return (value - 1000) / 1000;
-  if (value > 100) return value / 1000;
-  if (value > 1) return value / 100;
-  return value;
-}
 
 interface ThrottleDropEvent {
   /** Sample index where the drop starts */

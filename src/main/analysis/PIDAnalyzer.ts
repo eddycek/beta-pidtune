@@ -69,6 +69,7 @@ import { analyzeDTermEffectiveness } from './DTermAnalyzer';
 import { mapToSliders, computeSliderDelta, buildRecommendedPIDs } from './SliderMapper';
 import {
   analyzeFeedforward,
+  deriveMaxStickRate,
   recommendFeedforward,
   recommendRCLinkBaseline,
   mergeFFRecommendations,
@@ -370,7 +371,13 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
   const crossAxisCoupling =
     steps.length > 0 ? analyzeCrossAxisCoupling(steps, flightData) : undefined;
   const feedforwardAnalysis =
-    allResponses.length > 0 ? analyzeFeedforward(allResponses, feedforwardContext) : undefined;
+    allResponses.length > 0
+      ? analyzeFeedforward(
+          allResponses,
+          feedforwardContext,
+          deriveMaxStickRate(flightData.setpoint)
+        )
+      : undefined;
 
   await yieldToEventLoop();
 
