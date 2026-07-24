@@ -81,34 +81,35 @@ function buildActualPIDMap(config: PIDConfiguration): Record<string, number> {
 /** Settings that can only be set via CLI and not read back via MSP */
 const CLI_ONLY_SETTINGS = new Set(['rpm_filter_q']);
 
-/** Feedforward-stage settings readable via MSP_PID_ADVANCED → FeedforwardConfiguration key */
+/** Feedforward-stage settings readable via MSP_PID_ADVANCED → FeedforwardConfiguration key.
+ * Fields that are optional in FeedforwardConfiguration (absent on short/old-firmware
+ * responses) fall through to `unchecked` when the read-back doesn't report them. */
 const FF_MSP_READABLE: Record<string, keyof FeedforwardConfiguration> = {
   feedforward_boost: 'boost',
   feedforward_smooth_factor: 'smoothFactor',
   feedforward_jitter_factor: 'jitterFactor',
   feedforward_max_rate_limit: 'maxRateLimit',
+  feedforward_averaging: 'averaging',
   d_min_gain: 'dMinGain',
   iterm_relax: 'itermRelax',
   iterm_relax_cutoff: 'itermRelaxCutoff',
+  anti_gravity_gain: 'antiGravityGain',
+  thrust_linear: 'thrustLinear',
+  dyn_idle_min_rpm: 'dynIdleMinRpm',
+  vbat_sag_compensation: 'vbatSagCompensation',
+  tpa_mode: 'tpaMode',
+  tpa_rate: 'tpaRate',
+  tpa_breakpoint: 'tpaBreakpoint',
 };
 
-/** Feedforward-stage settings not currently parsed by getFeedforwardConfiguration().
- * Several DO have MSP_PID_ADVANCED offsets in mspLayouts.ts (tpa_*, anti_gravity_gain,
- * feedforward_averaging, …) — wiring them in would extend verification coverage.
- * Until then they are skipped during verification (same treatment as CLI_ONLY_SETTINGS). */
+/** Feedforward-stage settings with no MSP_PID_ADVANCED representation at all —
+ * genuinely CLI-only, skipped during verification (same treatment as
+ * CLI_ONLY_SETTINGS). Everything else applied in the FF stage is verified. */
 const FF_CLI_ONLY = new Set([
-  'feedforward_averaging',
-  'tpa_rate',
-  'tpa_breakpoint',
-  'tpa_mode',
   'tpa_low_always',
-  'anti_gravity_gain',
-  'thrust_linear',
-  'dyn_idle_min_rpm',
   'pidsum_limit',
   'pidsum_limit_yaw',
   'rc_smoothing_auto_factor',
-  'vbat_sag_compensation',
   'simplified_dmax_gain',
   'dterm_lpf1_dyn_expo',
 ]);

@@ -241,7 +241,9 @@ export function buildAdvancedConfigData(pidProcessDenom: number, gyroSyncDenom =
   return buf;
 }
 
-/** MSP_PID_ADVANCED (94) — 55+ bytes (feedforward configuration, BF 4.3+) */
+/** MSP_PID_ADVANCED (94) — 55+ bytes (feedforward configuration, BF 4.3+).
+ * Pass `fullLayout: true` for the API 1.45+ 61-byte layout that carries
+ * vbat sag / thrust linearization / anti-gravity gain / TPA fields. */
 export function buildPIDAdvancedData(
   opts: {
     ffTransition?: number;
@@ -260,9 +262,33 @@ export function buildPIDAdvancedData(
     itermRelax?: number;
     itermRelaxType?: number;
     itermRelaxCutoff?: number;
+    ffAveraging?: number;
+    dynIdleMinRpm?: number;
+    fullLayout?: boolean;
+    vbatSagCompensation?: number;
+    thrustLinear?: number;
+    antiGravityGain?: number;
+    tpaMode?: number;
+    tpaRate?: number;
+    tpaBreakpoint?: number;
   } = {}
 ): Buffer {
-  const buf = Buffer.alloc(55, 0);
+  const buf = Buffer.alloc(opts.fullLayout ? 61 : 55, 0);
+  if (opts.ffAveraging !== undefined) writeField(buf, PID_ADVANCED.FF_AVERAGING, opts.ffAveraging);
+  if (opts.dynIdleMinRpm !== undefined)
+    writeField(buf, PID_ADVANCED.IDLE_MIN_RPM, opts.dynIdleMinRpm);
+  if (opts.fullLayout) {
+    if (opts.vbatSagCompensation !== undefined)
+      writeField(buf, PID_ADVANCED.VBAT_SAG_COMPENSATION, opts.vbatSagCompensation);
+    if (opts.thrustLinear !== undefined)
+      writeField(buf, PID_ADVANCED.THRUST_LINEARIZATION, opts.thrustLinear);
+    if (opts.antiGravityGain !== undefined)
+      writeField(buf, PID_ADVANCED.ANTI_GRAVITY_GAIN, opts.antiGravityGain);
+    if (opts.tpaMode !== undefined) writeField(buf, PID_ADVANCED.TPA_MODE, opts.tpaMode);
+    if (opts.tpaRate !== undefined) writeField(buf, PID_ADVANCED.TPA_RATE, opts.tpaRate);
+    if (opts.tpaBreakpoint !== undefined)
+      writeField(buf, PID_ADVANCED.TPA_BREAKPOINT, opts.tpaBreakpoint);
+  }
   if (opts.ffTransition !== undefined)
     writeField(buf, PID_ADVANCED.FF_TRANSITION, opts.ffTransition);
   if (opts.ffRoll !== undefined) writeField(buf, PID_ADVANCED.FF_ROLL, opts.ffRoll);

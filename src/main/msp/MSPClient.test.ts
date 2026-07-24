@@ -344,7 +344,47 @@ describe('MSPClient.getFeedforwardConfiguration', () => {
       itermRelax: 0,
       itermRelaxType: 0,
       itermRelaxCutoff: 0,
+      averaging: 0,
+      dynIdleMinRpm: 0,
     });
+  });
+
+  it('parses extended API 1.45+ fields from a 61-byte response', async () => {
+    const buf = Buffer.alloc(61, 0);
+    writeField(buf, PID_ADVANCED.FF_BOOST, 15);
+    writeField(buf, PID_ADVANCED.FF_AVERAGING, 2);
+    writeField(buf, PID_ADVANCED.IDLE_MIN_RPM, 30);
+    writeField(buf, PID_ADVANCED.VBAT_SAG_COMPENSATION, 75);
+    writeField(buf, PID_ADVANCED.THRUST_LINEARIZATION, 25);
+    writeField(buf, PID_ADVANCED.ANTI_GRAVITY_GAIN, 110);
+    writeField(buf, PID_ADVANCED.TPA_MODE, 1);
+    writeField(buf, PID_ADVANCED.TPA_RATE, 65);
+    writeField(buf, PID_ADVANCED.TPA_BREAKPOINT, 1350);
+
+    mockSendCommand.mockResolvedValue({ command: MSPCommand.MSP_PID_ADVANCED, data: buf });
+
+    const result = await client.getFeedforwardConfiguration();
+
+    expect(result.averaging).toBe(2);
+    expect(result.dynIdleMinRpm).toBe(30);
+    expect(result.vbatSagCompensation).toBe(75);
+    expect(result.thrustLinear).toBe(25);
+    expect(result.antiGravityGain).toBe(110);
+    expect(result.tpaMode).toBe(1);
+    expect(result.tpaRate).toBe(65);
+    expect(result.tpaBreakpoint).toBe(1350);
+  });
+
+  it('omits extended fields on a 55-byte (API < 1.45) response', async () => {
+    const buf = Buffer.alloc(55, 0);
+    mockSendCommand.mockResolvedValue({ command: MSPCommand.MSP_PID_ADVANCED, data: buf });
+
+    const result = await client.getFeedforwardConfiguration();
+
+    expect(result.vbatSagCompensation).toBeUndefined();
+    expect(result.thrustLinear).toBeUndefined();
+    expect(result.antiGravityGain).toBeUndefined();
+    expect(result.tpaRate).toBeUndefined();
   });
 
   it('throws on response shorter than minimum length', async () => {
