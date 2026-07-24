@@ -709,6 +709,39 @@ export interface PIDAnalysisResult {
   };
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
+  /** System identification + what-if prediction (P3.2, Flash Tune only).
+   * Present only when the plant fit passed the coherence and quality gates.
+   * Always a PREDICTION — computed by re-closing the identified plant model
+   * with the proposed gains, never a measurement. */
+  whatIf?: {
+    roll?: AxisWhatIfPrediction;
+    pitch?: AxisWhatIfPrediction;
+    /** The gains the 'proposed' predictions were computed with */
+    proposedPIDs: PIDConfiguration;
+  };
+}
+
+/** Per-axis what-if prediction (P3.2) */
+export interface AxisWhatIfPrediction {
+  /** Identified plant model (2nd order + delay) */
+  plant: {
+    gainK: number;
+    naturalFreqHz: number;
+    damping: number;
+    delayMs: number;
+    fitQuality: number;
+  };
+  /** Prediction with the current flight gains (sanity anchor vs measured) */
+  current: WhatIfPredictedResponse;
+  /** Prediction with the proposed gains */
+  proposed: WhatIfPredictedResponse;
+}
+
+/** One predicted closed-loop response (P3.2) */
+export interface WhatIfPredictedResponse {
+  pids: { P: number; I: number; D: number };
+  response: { timeMs: number[]; response: number[] };
+  metrics: AxisTransferFunctionMetrics;
 }
 
 /** Per-axis transfer function metrics (mirrors TransferFunctionEstimator.TransferFunctionMetrics) */

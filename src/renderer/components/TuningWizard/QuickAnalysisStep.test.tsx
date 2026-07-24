@@ -160,3 +160,60 @@ describe('QuickAnalysisStep', () => {
     expect(btn).toBeDisabled();
   });
 });
+
+describe('QuickAnalysisStep what-if prediction (P3.2)', () => {
+  const defaultProps = {
+    filterResult: null as FilterAnalysisResult | null,
+    filterAnalyzing: false,
+    filterProgress: null,
+    filterError: null,
+    tfResult: null as PIDAnalysisResult | null,
+    tfAnalyzing: false,
+    tfError: null,
+    runQuickAnalysis: vi.fn().mockResolvedValue(undefined),
+    quickAnalyzing: false,
+    onContinue: vi.fn(),
+  };
+
+  function makeWhatIf() {
+    const response = { timeMs: [0, 50, 100, 150], response: [0, 0.8, 1.1, 1.0] };
+    const metrics = {
+      bandwidthHz: 40,
+      phaseMarginDeg: 60,
+      gainMarginDb: 10,
+      overshootPercent: 10,
+      settlingTimeMs: 120,
+      riseTimeMs: 45,
+      dcGainDb: 0,
+    };
+    const axis = {
+      plant: { gainK: 8, naturalFreqHz: 30, damping: 0.7, delayMs: 5, fitQuality: 0.9 },
+      current: { pids: { P: 45, I: 80, D: 40 }, response, metrics },
+      proposed: { pids: { P: 50, I: 80, D: 48 }, response, metrics },
+    };
+    return {
+      roll: axis,
+      pitch: axis,
+      proposedPIDs: {
+        roll: { P: 50, I: 80, D: 48 },
+        pitch: { P: 52, I: 84, D: 50 },
+        yaw: { P: 45, I: 80, D: 0 },
+      },
+    };
+  }
+
+  it('renders the predicted-response section when whatIf is present', () => {
+    const tf = makeTFResult();
+    (tf as any).whatIf = makeWhatIf();
+    render(<QuickAnalysisStep {...defaultProps} tfResult={tf} />);
+
+    expect(screen.getByText('Predicted Response with Proposed Gains')).toBeInTheDocument();
+    expect(screen.getByText(/fit quality/)).toBeInTheDocument();
+    expect(screen.getByText(/simulation, not a measurement/)).toBeInTheDocument();
+  });
+
+  it('omits the predicted-response section without whatIf', () => {
+    render(<QuickAnalysisStep {...defaultProps} tfResult={makeTFResult()} />);
+    expect(screen.queryByText('Predicted Response with Proposed Gains')).not.toBeInTheDocument();
+  });
+});

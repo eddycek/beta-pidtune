@@ -20,6 +20,7 @@ import type {
   AxisStepProfile,
   BayesianSuggestion,
   PIDAnalysisResult,
+  AxisWhatIfPrediction,
   StepEvent,
   StepResponse,
 } from '@shared/types/analysis.types';
@@ -75,6 +76,7 @@ import {
   mergeFFRecommendations,
 } from './FeedforwardAnalyzer';
 import { analyzeThrottleTF, recommendTPAFromThrottleTF } from './ThrottleTFAnalyzer';
+import { computeWhatIf } from './SystemIdentifier';
 import { computeDeconvolvedStepResponse } from './StepResponseStacker';
 import { DECONV_DISAGREEMENT_RATIO, DECONV_DISAGREEMENT_MIN_PP } from './constants';
 
@@ -594,7 +596,35 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
     bayesianSuggestion = suggestNextPID(historyObservations) ?? undefined;
   }
 
+  // ── System identification + what-if prediction (P3.2, Flash Tune only) ──
+  // Identify the plant from the measured closed loop with the flight gains,
+  // then predict the step response the PROPOSED gains would produce. Gated
+  // inside computeWhatIf on coherence and fit quality.
+  let whatIf: PIDAnalysisResult['whatIf'];
+  if (extracted.tfResult) {
+    const anchorPIDs = flightPIDs ?? currentPIDs;
+    const proposedPIDs = buildRecommendedPIDs(anchorPIDs, recommendations);
+    const axisResults: { roll?: AxisWhatIfPrediction; pitch?: AxisWhatIfPrediction } = {};
+    for (const axis of ['roll', 'pitch'] as const) {
+      try {
+        const r = computeWhatIf(
+          extracted.tfResult[axis],
+          anchorPIDs[axis],
+          proposedPIDs[axis],
+          flightData.sampleRateHz
+        );
+        if (r) axisResults[axis] = r;
+      } catch {
+        // Non-fatal — the what-if section is simply omitted for this axis
+      }
+    }
+    if (axisResults.roll || axisResults.pitch) {
+      whatIf = { ...axisResults, proposedPIDs };
+    }
+  }
+
   return {
+    ...(whatIf ? { whatIf } : {}),
     roll: profiles.roll,
     pitch: profiles.pitch,
     yaw: profiles.yaw,

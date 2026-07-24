@@ -14,6 +14,25 @@ const PEAK_TYPE_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
+/** Build per-axis step data for the what-if chart. Axes without a prediction
+ * (yaw, or a gated axis) render as a flat zero trace on the shared time base. */
+function buildWhatIfStepData(
+  whatIf: NonNullable<PIDAnalysisResult['whatIf']>,
+  which: 'current' | 'proposed'
+): {
+  roll: { timeMs: number[]; response: number[] };
+  pitch: { timeMs: number[]; response: number[] };
+  yaw: { timeMs: number[]; response: number[] };
+} {
+  const ref = (whatIf.roll ?? whatIf.pitch)![which].response;
+  const flat = { timeMs: ref.timeMs, response: new Array(ref.timeMs.length).fill(0) };
+  return {
+    roll: whatIf.roll ? whatIf.roll[which].response : flat,
+    pitch: whatIf.pitch ? whatIf.pitch[which].response : flat,
+    yaw: flat,
+  };
+}
+
 interface QuickAnalysisStepProps {
   filterResult: FilterAnalysisResult | null;
   filterAnalyzing: boolean;
@@ -183,6 +202,30 @@ export function QuickAnalysisStep({
                 </>
               )}
 
+              {tfResult.whatIf && (tfResult.whatIf.roll || tfResult.whatIf.pitch) && (
+                <>
+                  <h4 className="chart-title">Predicted Response with Proposed Gains</h4>
+                  <p className="chart-description">
+                    Prediction from a plant model identified from this flight (2nd order + delay,
+                    fit quality{' '}
+                    {[
+                      tfResult.whatIf.roll ? `roll ${tfResult.whatIf.roll.plant.fitQuality}` : null,
+                      tfResult.whatIf.pitch
+                        ? `pitch ${tfResult.whatIf.pitch.plant.fitQuality}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                    ). Before = current gains, after = the recommended gains — this is a simulation,
+                    not a measurement.
+                  </p>
+                  <TFStepResponseChart
+                    stepResponse={buildWhatIfStepData(tfResult.whatIf, 'proposed')}
+                    beforeStepResponse={buildWhatIfStepData(tfResult.whatIf, 'current')}
+                  />
+                </>
+              )}
+
               <button className="noise-details-toggle" onClick={() => setBodeOpen(!bodeOpen)}>
                 {bodeOpen ? 'Hide frequency response (Bode)' : 'Show frequency response (Bode)'}
               </button>
@@ -197,16 +240,19 @@ export function QuickAnalysisStep({
                         frequencies: tfResult.transferFunction.roll.frequencies,
                         magnitude: tfResult.transferFunction.roll.magnitude,
                         phase: tfResult.transferFunction.roll.phase,
+                        coherence: tfResult.transferFunction.roll.coherence,
                       },
                       pitch: {
                         frequencies: tfResult.transferFunction.pitch.frequencies,
                         magnitude: tfResult.transferFunction.pitch.magnitude,
                         phase: tfResult.transferFunction.pitch.phase,
+                        coherence: tfResult.transferFunction.pitch.coherence,
                       },
                       yaw: {
                         frequencies: tfResult.transferFunction.yaw.frequencies,
                         magnitude: tfResult.transferFunction.yaw.magnitude,
                         phase: tfResult.transferFunction.yaw.phase,
+                        coherence: tfResult.transferFunction.yaw.coherence,
                       },
                     }}
                   />

@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3345 unit tests across 152 files (3322 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3356 unit tests across 153 files (3333 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -199,7 +199,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `TuningWizard/PIDAnalysisStep.test.tsx` | 10 | PID results display, flight style pill, step count pluralization, data quality pill |
 | `TuningWizard/RecommendationCard.test.tsx` | 13 | Setting label lookup, value display, change percentage, confidence, feedforward labels, measured-evidence block (rendered/omitted) |
 | `TuningWizard/ApplyConfirmationModal.test.tsx` | 8 | Change counts, confirm/cancel, reboot warning |
-| `TuningWizard/QuickAnalysisStep.test.tsx` | 6 | Quick analysis dual-panel (filter + TF), auto-run, progress, retry |
+| `TuningWizard/QuickAnalysisStep.test.tsx` | 8 | Quick analysis dual-panel (filter + TF), auto-run, progress, retry, what-if predicted-response section (rendered/omitted) |
 | `TuningWizard/WizardProgress.test.tsx` | 10 | Step indicator, mode-aware filtering (filter/pid/quick), current/done/upcoming states |
 | `TuningWizard/SessionSelectStep.test.tsx` | 8 | Session picker, auto-parse, parsing/error/empty states, reverse order |
 | `TuningWizard/TuningSummaryStep.test.tsx` | 17 | Recommendations table, mode-aware labels (filter/pid/quick), apply/progress/success/error states, tfResult for quick mode |
@@ -386,6 +386,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/MechanicalHealthChecker.test.ts` | 21 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback) |
 | `analysis/DynamicLowpassRecommender.test.ts` | 31 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId, disable hysteresis (4 dB threshold, 4-6 dB gray zone leaves config untouched) |
 | `analysis/SliderMapper.test.ts` | 16 | Slider-aligned PID mapping, master multiplier, PD ratio, buildRecommendedPIDs, slider delta computation |
+| `analysis/SystemIdentifier.test.ts` | 9 | System identification (P3.2): known 2nd-order plant recovery from analytic closed loop (ωn/ζ/τ tolerances), coherence + bin-count gates, predicted step settles to unity, D-raise reduces predicted overshoot, P-raise speeds rise, what-if current+proposed pair, BF PID scale anchor |
 | `analysis/FeedforwardAnalyzer.test.ts` | 65 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic, FF-RC-SMOOTH advisory skipped for aggressive style, deriveMaxStickRate (max \|setpoint\|, floor 300, fallback 670) |
 | `analysis/BayesianPIDOptimizer.test.ts` | 31 | Gaussian Process surrogate, Expected Improvement, Latin Hypercube Sampling, bounds |
 | `analysis/TransferFunctionEstimator.test.ts` | 32 | Wiener deconvolution, frequency response estimation, Bode plot data, PID recommendations from transfer function, DC gain from 1-5 Hz band average (computeDcGainDb with bin-1/bin-0 fallbacks), magnitude-squared coherence γ²(f) + coherenceMean (1-30 Hz band, ≥2 Welch windows), gain/phase margin crossingFound flags |
