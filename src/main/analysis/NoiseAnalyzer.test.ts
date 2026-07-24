@@ -8,6 +8,7 @@ import {
   averageSpectra,
   categorizeNoiseLevel,
   buildNoiseProfile,
+  reclassifyPeaksWithThrottle,
 } from './NoiseAnalyzer';
 import type { PowerSpectrum, AxisNoiseProfile } from '@shared/types/analysis.types';
 import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
@@ -462,5 +463,114 @@ describe('buildNoiseProfile', () => {
     const profile4 = buildNoiseProfile(roll, pitch, yaw, '4"');
     expect(profile5.overallLevel).toBe('high'); // -18 >= -20 → HIGH on 5"
     expect(profile4.overallLevel).toBe('medium'); // -18 < -17 → not high on 4", -18 >= -30 → MEDIUM
+  });
+});
+
+describe('reclassifyPeaksWithThrottle', () => {
+  /** Build a throttle band whose axis-0 spectrum has one peak at peakHz */
+  function makeBand(
+    throttleMin: number,
+    throttleMax: number,
+    peakHz: number,
+    baselineDb = -40,
+    peakDb = -15
+  ) {
+    const numBins = 512;
+    const freqRes = 2;
+    const frequencies = new Float64Array(numBins).map((_, i) => i * freqRes);
+    const magnitudes = new Float64Array(numBins).fill(baselineDb);
+    const bin = Math.round(peakHz / freqRes);
+    magnitudes[bin] = peakDb;
+    const spectrum = { frequencies, magnitudes };
+    return {
+      throttleMin,
+      throttleMax,
+      sampleCount: 5000,
+      spectra: [spectrum, spectrum, spectrum] as [
+        typeof spectrum,
+        typeof spectrum,
+        typeof spectrum,
+      ],
+      noiseFloorDb: [baselineDb, baselineDb, baselineDb] as [number, number, number],
+    };
+  }
+
+  const basePeak = { frequency: 200, amplitude: 20, type: 'frame_resonance' as const };
+
+  it('reclassifies a throttle-tracking peak as motor_harmonic with its track', () => {
+    // Peak frequency rises 140→260 Hz across throttle — motor noise
+    const bands = [
+      makeBand(0.1, 0.2, 140),
+      makeBand(0.3, 0.4, 180),
+      makeBand(0.5, 0.6, 220),
+      makeBand(0.7, 0.8, 260),
+    ];
+    const [peak] = reclassifyPeaksWithThrottle([basePeak], bands, 0, '5"');
+    expect(peak.type).toBe('motor_harmonic');
+    expect(peak.classifiedBy).toBe('throttle_track');
+    expect(peak.throttleTrack).toBeDefined();
+    expect(peak.throttleTrack!.frequencyHz.length).toBe(4);
+  });
+
+  it('reclassifies a stationary peak as frame_resonance (definitively not motor)', () => {
+    // Same frequency at every throttle — stationary
+    const misclassified = { frequency: 160, amplitude: 20, type: 'motor_harmonic' as const };
+    const bands = [
+      makeBand(0.1, 0.2, 160),
+      makeBand(0.3, 0.4, 160),
+      makeBand(0.5, 0.6, 160),
+      makeBand(0.7, 0.8, 162),
+    ];
+    const [peak] = reclassifyPeaksWithThrottle([misclassified], bands, 0, '5"');
+    expect(peak.type).toBe('frame_resonance');
+    expect(peak.classifiedBy).toBe('throttle_track');
+  });
+
+  it('classifies a stationary high-frequency peak as electrical', () => {
+    const p = { frequency: 600, amplitude: 15, type: 'motor_harmonic' as const };
+    const bands = [makeBand(0.1, 0.2, 600), makeBand(0.3, 0.4, 600), makeBand(0.5, 0.6, 602)];
+    const [peak] = reclassifyPeaksWithThrottle([p], bands, 0, '5"');
+    expect(peak.type).toBe('electrical');
+  });
+
+  it('keeps the heuristic classification for ambiguous tracks', () => {
+    // Range ~10% — between stationary (8%) and tracking (15%) thresholds
+    const bands = [
+      makeBand(0.1, 0.2, 190),
+      makeBand(0.3, 0.4, 196),
+      makeBand(0.5, 0.6, 202),
+      makeBand(0.7, 0.8, 210),
+    ];
+    const [peak] = reclassifyPeaksWithThrottle([basePeak], bands, 0, '5"');
+    expect(peak.type).toBe('frame_resonance'); // unchanged
+    expect(peak.classifiedBy).toBe('heuristic');
+  });
+
+  it('keeps the heuristic classification with too few bands', () => {
+    const bands = [makeBand(0.1, 0.2, 140), makeBand(0.7, 0.8, 260)];
+    const [peak] = reclassifyPeaksWithThrottle([basePeak], bands, 0, '5"');
+    expect(peak.classifiedBy).toBe('heuristic');
+    expect(peak.type).toBe('frame_resonance');
+  });
+
+  it('skips bands where the peak is not prominent', () => {
+    // Peak visible in only 2 of 4 bands (others flat) → heuristic kept
+    const flat = makeBand(0.3, 0.4, 180);
+    flat.spectra[0].magnitudes.fill(-40);
+    const flat2 = makeBand(0.5, 0.6, 220);
+    flat2.spectra[0].magnitudes.fill(-40);
+    const bands = [makeBand(0.1, 0.2, 140), flat, flat2, makeBand(0.7, 0.8, 260)];
+    const [peak] = reclassifyPeaksWithThrottle([basePeak], bands, 0, '5"');
+    expect(peak.classifiedBy).toBe('heuristic');
+  });
+
+  it('uses the size-aware frame band for stationary peaks', () => {
+    // 300 Hz stationary: inside the 2.5" frame band, outside the 5" band
+    const p = { frequency: 300, amplitude: 15, type: 'unknown' as const };
+    const bands = [makeBand(0.1, 0.2, 300), makeBand(0.3, 0.4, 300), makeBand(0.5, 0.6, 301)];
+    const [micro] = reclassifyPeaksWithThrottle([p], bands, 0, '2.5"');
+    expect(micro.type).toBe('frame_resonance');
+    const [five] = reclassifyPeaksWithThrottle([p], bands, 0, '5"');
+    expect(five.type).toBe('unknown'); // 300 Hz outside 5" band, below electrical
   });
 });

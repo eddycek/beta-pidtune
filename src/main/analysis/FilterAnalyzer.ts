@@ -19,7 +19,7 @@ import type {
 import { DEFAULT_FILTER_SETTINGS } from '@shared/types/analysis.types';
 import { findSteadySegments, findThrottleSweepSegments } from './SegmentSelector';
 import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
-import { analyzeAxisNoise, buildNoiseProfile } from './NoiseAnalyzer';
+import { analyzeAxisNoise, buildNoiseProfile, reclassifyPeaksWithThrottle } from './NoiseAnalyzer';
 import {
   recommend,
   generateSummary,
@@ -151,6 +151,21 @@ export async function analyze(
     throttleSpectrogram = computeThrottleSpectrogram(flightData);
   }
 
+  // Step 3c: Throttle-track reclassification — a peak whose frequency rises
+  // with throttle is motor noise; a stationary peak is frame/electrical.
+  // Definitive where the whole-flight equal-spacing heuristic can only guess.
+  if (throttleSpectrogram && throttleSpectrogram.bandsWithData >= 3) {
+    const axisProfiles = [noiseProfile.roll, noiseProfile.pitch, noiseProfile.yaw] as const;
+    for (let axis = 0; axis < 3; axis++) {
+      axisProfiles[axis].peaks = reclassifyPeaksWithThrottle(
+        axisProfiles[axis].peaks,
+        throttleSpectrogram.bands,
+        axis as 0 | 1 | 2,
+        options?.droneSize
+      );
+    }
+  }
+
   await yieldToEventLoop();
 
   // Step 4: Generate recommendations
@@ -256,6 +271,19 @@ async function analyzeEntireFlight(
   let throttleSpectrogram: ThrottleSpectrogramResult | undefined;
   if (flightData.setpoint[3]?.values.length > 0) {
     throttleSpectrogram = computeThrottleSpectrogram(flightData);
+  }
+
+  // Throttle-track reclassification (see main path)
+  if (throttleSpectrogram && throttleSpectrogram.bandsWithData >= 3) {
+    const axisProfiles = [noiseProfile.roll, noiseProfile.pitch, noiseProfile.yaw] as const;
+    for (let axis = 0; axis < 3; axis++) {
+      axisProfiles[axis].peaks = reclassifyPeaksWithThrottle(
+        axisProfiles[axis].peaks,
+        throttleSpectrogram.bands,
+        axis as 0 | 1 | 2,
+        options?.droneSize
+      );
+    }
   }
 
   onProgress?.({ step: 'recommending', percent: 85 });

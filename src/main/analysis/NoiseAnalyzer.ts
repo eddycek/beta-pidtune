@@ -9,6 +9,7 @@ import type {
   NoisePeak,
   AxisNoiseProfile,
   NoiseProfile,
+  ThrottleBand,
 } from '@shared/types/analysis.types';
 import type { DroneSize } from '@shared/types/profile.types';
 import {
@@ -25,6 +26,12 @@ import {
   MOTOR_HARMONIC_TOLERANCE_RATIO,
   MOTOR_HARMONIC_TOLERANCE_MIN_HZ,
   MOTOR_HARMONIC_MIN_PEAKS,
+  HARMONIC_TRACK_MIN_BANDS,
+  HARMONIC_TRACK_MIN_CORRELATION,
+  HARMONIC_TRACK_MIN_REL_RANGE,
+  STATIONARY_TRACK_MAX_REL_RANGE,
+  TRACK_SEARCH_REL_WINDOW,
+  TRACK_BAND_MIN_PROMINENCE_DB,
 } from './constants';
 
 /** Sentinel value for bins with near-zero power (10*log10(1e-24)) — re-exported from FFTCompute */
@@ -277,6 +284,117 @@ export function analyzeAxisNoise(
     noiseFloorDb,
     peaks,
   };
+}
+
+/**
+ * Reclassify an axis's peaks using the throttle spectrogram.
+ *
+ * Motor noise tracks RPM: its frequency rises with throttle. Frame resonance
+ * and electrical noise are stationary. For each averaged-spectrum peak, the
+ * strongest nearby bin is located in every throttle band; regressing those
+ * frequencies against band throttle gives a definitive classification where
+ * the whole-flight equal-spacing heuristic can only guess (harmonics smear
+ * across RPM in the averaged spectrum).
+ *
+ * Peaks whose track is ambiguous (or with too few bands) keep their
+ * heuristic classification. Motor-classified peaks carry their measured
+ * `throttleTrack` for downstream RPM-filter reasoning.
+ */
+export function reclassifyPeaksWithThrottle(
+  peaks: NoisePeak[],
+  bands: ThrottleBand[],
+  axisIndex: 0 | 1 | 2,
+  droneSize?: DroneSize
+): NoisePeak[] {
+  const usableBands = bands.filter((b) => b.spectra && b.noiseFloorDb);
+  if (usableBands.length < HARMONIC_TRACK_MIN_BANDS) {
+    return peaks.map((p) => ({ ...p, classifiedBy: 'heuristic' as const }));
+  }
+
+  const frameBand = droneSize
+    ? FRAME_RESONANCE_BY_SIZE[droneSize]
+    : { min: FRAME_RESONANCE_MIN_HZ, max: FRAME_RESONANCE_MAX_HZ };
+
+  return peaks.map((peak) => {
+    const searchHalfWidth = peak.frequency * TRACK_SEARCH_REL_WINDOW;
+    const throttleMid: number[] = [];
+    const frequencyHz: number[] = [];
+
+    for (const band of usableBands) {
+      const spectrum = band.spectra![axisIndex];
+      const floor = band.noiseFloorDb![axisIndex];
+      const { frequencies, magnitudes } = spectrum;
+      if (frequencies.length === 0) continue;
+
+      // Strongest bin within the search window around the averaged peak
+      let bestIdx = -1;
+      let bestMag = -Infinity;
+      for (let i = 0; i < frequencies.length; i++) {
+        const f = frequencies[i];
+        if (f < peak.frequency - searchHalfWidth) continue;
+        if (f > peak.frequency + searchHalfWidth) break;
+        if (magnitudes[i] > bestMag) {
+          bestMag = magnitudes[i];
+          bestIdx = i;
+        }
+      }
+      if (bestIdx < 0 || bestMag - floor < TRACK_BAND_MIN_PROMINENCE_DB) continue;
+
+      throttleMid.push((band.throttleMin + band.throttleMax) / 2);
+      frequencyHz.push(frequencies[bestIdx]);
+    }
+
+    if (throttleMid.length < HARMONIC_TRACK_MIN_BANDS) {
+      return { ...peak, classifiedBy: 'heuristic' as const };
+    }
+
+    const meanFreq = frequencyHz.reduce((a, b) => a + b, 0) / frequencyHz.length;
+    const relRange = (Math.max(...frequencyHz) - Math.min(...frequencyHz)) / meanFreq;
+    const correlation = pearson(throttleMid, frequencyHz);
+
+    if (relRange >= HARMONIC_TRACK_MIN_REL_RANGE && correlation >= HARMONIC_TRACK_MIN_CORRELATION) {
+      return {
+        ...peak,
+        type: 'motor_harmonic' as const,
+        classifiedBy: 'throttle_track' as const,
+        throttleTrack: { throttleMid, frequencyHz },
+      };
+    }
+
+    if (relRange <= STATIONARY_TRACK_MAX_REL_RANGE) {
+      // Stationary → definitively NOT motor noise
+      const type =
+        peak.frequency >= frameBand.min && peak.frequency <= frameBand.max
+          ? ('frame_resonance' as const)
+          : peak.frequency >= ELECTRICAL_NOISE_MIN_HZ
+            ? ('electrical' as const)
+            : ('unknown' as const);
+      return { ...peak, type, classifiedBy: 'throttle_track' as const };
+    }
+
+    // Ambiguous track — keep the heuristic classification
+    return { ...peak, classifiedBy: 'heuristic' as const };
+  });
+}
+
+/** Pearson correlation coefficient of two equal-length series */
+function pearson(x: number[], y: number[]): number {
+  const n = x.length;
+  if (n < 2) return 0;
+  const mx = x.reduce((a, b) => a + b, 0) / n;
+  const my = y.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = x[i] - mx;
+    const dy = y[i] - my;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+  const denom = Math.sqrt(sxx * syy);
+  return denom > 0 ? sxy / denom : 0;
 }
 
 /**

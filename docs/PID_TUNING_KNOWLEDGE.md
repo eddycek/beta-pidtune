@@ -348,6 +348,30 @@ Harmonics appear at 2×, 3×, etc. of the fundamental — RPM filter places notc
   - **Multiple equally-spaced peaks** (≥3) = motor harmonic series
 - PIDtoolbox and BF Explorer both show peaks in spectral view
 
+### Throttle-Track Peak Classification (implemented)
+
+The average-spectrum heuristic (equal spacing, frequency bands) is refined with measured
+throttle-tracking evidence when a throttle spectrogram is available
+(`reclassifyPeaksWithThrottle()` in `NoiseAnalyzer.ts`, wired in `FilterAnalyzer.ts`):
+
+- For each detected peak, the peak's local maximum is re-located per throttle band inside a
+  ±30% relative search window (`TRACK_SEARCH_REL_WINDOW = 0.3`), requiring ≥6 dB prominence
+  over the band's local floor (`TRACK_BAND_MIN_PROMINENCE_DB = 6`)
+- Requires ≥3 throttle bands with usable spectra (`HARMONIC_TRACK_MIN_BANDS = 3`)
+- **Tracks throttle** → reclassified `motor_harmonic`: Pearson correlation of band-peak
+  frequency vs throttle ≥ 0.6 (`HARMONIC_TRACK_MIN_CORRELATION`) AND relative frequency range
+  ≥ 15% (`HARMONIC_TRACK_MIN_REL_RANGE`)
+- **Stationary** → reclassified `frame_resonance` (inside the size-aware band) or
+  `electrical` (>500 Hz): relative range ≤ 8% (`STATIONARY_TRACK_MAX_REL_RANGE`)
+- Ambiguous tracks keep their heuristic classification
+- Result is stamped on the peak: `classifiedBy: 'throttle_track' | 'heuristic'`, with the
+  measured `throttleTrack` (throttle midpoints + tracked frequencies) attached for UI/telemetry
+
+*Rationale*: whole-flight average spectra smear RPM-varying motor harmonics, so
+spacing-based heuristics misclassify (e.g. a fixed 600 Hz ESC switching peak landing on a
+harmonic grid). Measured throttle correlation is the physically correct discriminator —
+identical to how PIDtoolbox users read the throttle×frequency spectrogram visually.
+
 ### Throttle Spectrogram
 
 - FFT computed per throttle band (typically 10 bands from 0-100%)

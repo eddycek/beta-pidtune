@@ -3,27 +3,27 @@
   "stepsDetected": 36,
   "roll": {
     "responses": 12,
-    "meanOvershoot": 13.8,
-    "meanRiseTimeMs": 43.5,
-    "meanSettlingTimeMs": 208,
-    "meanLatencyMs": 2.3,
+    "meanOvershoot": 14,
+    "meanRiseTimeMs": 44,
+    "meanSettlingTimeMs": 224,
+    "meanLatencyMs": 0.7,
     "meanSteadyStateError": 2.6
   },
   "pitch": {
     "responses": 12,
-    "meanOvershoot": 14.3,
-    "meanRiseTimeMs": 46.5,
-    "meanSettlingTimeMs": 234,
-    "meanLatencyMs": 1.1,
+    "meanOvershoot": 14.7,
+    "meanRiseTimeMs": 46.3,
+    "meanSettlingTimeMs": 239,
+    "meanLatencyMs": 3,
     "meanSteadyStateError": 2.4
   },
   "yaw": {
     "responses": 12,
-    "meanOvershoot": 10.7,
-    "meanRiseTimeMs": 66,
-    "meanSettlingTimeMs": 197,
-    "meanLatencyMs": 1.5,
-    "meanSteadyStateError": 2.7
+    "meanOvershoot": 10.4,
+    "meanRiseTimeMs": 66.3,
+    "meanSettlingTimeMs": 198,
+    "meanLatencyMs": 1.7,
+    "meanSteadyStateError": 2.6
   },
   "dataQuality": {
     "tier": "excellent",

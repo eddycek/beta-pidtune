@@ -21,6 +21,14 @@ export interface NoisePeak {
   amplitude: number;
   /** Classification of peak source */
   type: 'frame_resonance' | 'motor_harmonic' | 'electrical' | 'unknown';
+  /** How the classification was determined. 'throttle_track' = the peak's
+   * frequency was regressed against throttle bands (definitive: tracks
+   * throttle = motor, stationary = frame/electrical); 'heuristic' = the
+   * whole-flight equal-spacing/band fallback. */
+  classifiedBy?: 'throttle_track' | 'heuristic';
+  /** Measured frequency track across throttle bands (motor harmonics only) —
+   * feeds RPM-filter recommendations */
+  throttleTrack?: { throttleMid: number[]; frequencyHz: number[] };
 }
 
 /** Noise characteristics for one axis */

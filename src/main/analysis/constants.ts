@@ -163,6 +163,36 @@ export const MOTOR_HARMONIC_TOLERANCE_MIN_HZ = 5;
 /** Minimum number of equally-spaced peaks to classify as motor harmonics */
 export const MOTOR_HARMONIC_MIN_PEAKS = 3;
 
+// ---- Throttle-Track Peak Classification ----
+// Motor noise frequency scales with RPM (≈ throttle); frame resonance and
+// electrical noise stay put. Regressing a peak's per-throttle-band frequency
+// against throttle is definitive where the whole-flight equal-spacing
+// heuristic can only guess.
+
+/** Minimum throttle bands showing the peak before track classification applies */
+export const HARMONIC_TRACK_MIN_BANDS = 3;
+
+/** Pearson correlation (throttle vs peak frequency) at/above which the peak
+ * is classified as a motor harmonic */
+export const HARMONIC_TRACK_MIN_CORRELATION = 0.6;
+
+/** Minimum relative frequency range across bands ((max-min)/mean) for a
+ * motor-harmonic classification — the track must actually move */
+export const HARMONIC_TRACK_MIN_REL_RANGE = 0.15;
+
+/** Maximum relative frequency range for a "stationary" classification
+ * (frame resonance / electrical). Between this and
+ * HARMONIC_TRACK_MIN_REL_RANGE the track is ambiguous → keep the heuristic. */
+export const STATIONARY_TRACK_MAX_REL_RANGE = 0.08;
+
+/** Per-band search window around the averaged-spectrum peak, as a fraction
+ * of the peak frequency (harmonics move proportionally with RPM) */
+export const TRACK_SEARCH_REL_WINDOW = 0.3;
+
+/** Minimum prominence (dB above the band's floor) for a band to count as
+ * showing the peak */
+export const TRACK_BAND_MIN_PROMINENCE_DB = 6;
+
 // ---- Filter Recommendation Safety Bounds ----
 
 /** Absolute minimum gyro lowpass 1 cutoff in Hz (BF guide: 50 very noisy, 80 slightly noisy) */

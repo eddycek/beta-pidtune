@@ -3,24 +3,24 @@
   "stepsDetected": 0,
   "roll": {
     "responses": 0,
-    "meanOvershoot": 57.5,
-    "meanRiseTimeMs": 3.3,
+    "meanOvershoot": 239.7,
+    "meanRiseTimeMs": 4.8,
     "meanSettlingTimeMs": 200,
     "meanLatencyMs": 0,
     "meanSteadyStateError": 0
   },
   "pitch": {
     "responses": 0,
-    "meanOvershoot": 45.3,
-    "meanRiseTimeMs": 2,
+    "meanOvershoot": 198.2,
+    "meanRiseTimeMs": 1.3,
     "meanSettlingTimeMs": 200,
     "meanLatencyMs": 0,
     "meanSteadyStateError": 0
   },
   "yaw": {
     "responses": 0,
-    "meanOvershoot": 81.2,
-    "meanRiseTimeMs": 48,
+    "meanOvershoot": 138.5,
+    "meanRiseTimeMs": 20,
     "meanSettlingTimeMs": 200,
     "meanLatencyMs": 0,
     "meanSteadyStateError": 0
@@ -32,29 +32,29 @@
   "transferFunctionMetrics": {
     "roll": {
       "bandwidthHz": 500,
-      "phaseMarginDeg": 280,
+      "phaseMarginDeg": 290,
       "gainMarginDb": 60,
       "dcGainDb": 1.4,
-      "overshootPercent": 58,
-      "riseTimeMs": 3,
+      "overshootPercent": 240,
+      "riseTimeMs": 5,
       "settlingTimeMs": 200
     },
     "pitch": {
       "bandwidthHz": 500,
-      "phaseMarginDeg": 96,
+      "phaseMarginDeg": 95,
       "gainMarginDb": 60,
       "dcGainDb": 1,
-      "overshootPercent": 45,
-      "riseTimeMs": 2,
+      "overshootPercent": 198,
+      "riseTimeMs": 1,
       "settlingTimeMs": 200
     },
     "yaw": {
       "bandwidthHz": 500,
-      "phaseMarginDeg": 64,
+      "phaseMarginDeg": 63,
       "gainMarginDb": 60,
       "dcGainDb": 1.2,
-      "overshootPercent": 81,
-      "riseTimeMs": 48,
+      "overshootPercent": 139,
+      "riseTimeMs": 20,
       "settlingTimeMs": 200
     }
   },
