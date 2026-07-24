@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeThrottleTF, DEFAULT_TF_BANDS, MIN_TF_SAMPLES } from './ThrottleTFAnalyzer';
+import {
+  analyzeThrottleTF,
+  recommendTPAFromThrottleTF,
+  DEFAULT_TF_BANDS,
+  MIN_TF_SAMPLES,
+} from './ThrottleTFAnalyzer';
 import type { BlackboxFlightData, TimeSeries } from '@shared/types/blackbox.types';
 
 function makeTimeSeries(values: Float64Array): TimeSeries {
@@ -191,5 +196,120 @@ describe('analyzeThrottleTF', () => {
     for (let i = 1; i < result.bands.length; i++) {
       expect(result.bands[i].throttleMin).toBeCloseTo(result.bands[i - 1].throttleMax, 5);
     }
+  });
+});
+
+describe('recommendTPAFromThrottleTF (P2.8)', () => {
+  function band(
+    throttleMin: number,
+    overshootPercent: number | null
+  ): import('./ThrottleTFAnalyzer').ThrottleTFBand {
+    return {
+      throttleMin,
+      throttleMax: throttleMin + 0.2,
+      sampleCount: 4096,
+      metrics:
+        overshootPercent === null
+          ? null
+          : {
+              bandwidthHz: 40,
+              phaseMarginDeg: 60,
+              gainMarginDb: 10,
+              overshootPercent,
+              settlingTimeMs: 100,
+              riseTimeMs: 50,
+              dcGainDb: 0,
+            },
+    };
+  }
+
+  function result(
+    rollOvershoots: (number | null)[],
+    pitchOvershoots?: (number | null)[]
+  ): import('./ThrottleTFAnalyzer').ThrottleTFResult {
+    const mk = (overshoots: (number | null)[]) => ({
+      bands: overshoots.map((o, i) => band(i * 0.2, o)),
+      bandsWithData: overshoots.filter((o) => o !== null).length,
+      metricsVariance: { bandwidthHz: 0, overshootPercent: 0, phaseMarginDeg: 0 },
+    });
+    const roll = mk(rollOvershoots);
+    return {
+      ...roll,
+      ...(pitchOvershoots ? { pitch: mk(pitchOvershoots) } : {}),
+    };
+  }
+
+  it('raises tpa_rate when overshoot grows with throttle', () => {
+    const recs = recommendTPAFromThrottleTF(result([5, 8, 12, 20, 30]), {
+      active: true,
+      rate: 65,
+      breakpoint: 1350,
+    });
+    const rateRec = recs.find((r) => r.ruleId === 'TPA-TF-RATE-UP');
+    expect(rateRec).toBeDefined();
+    expect(rateRec!.setting).toBe('tpa_rate');
+    expect(rateRec!.recommendedValue).toBe(75);
+    expect(rateRec!.confidence).toBe('medium');
+  });
+
+  it('lowers the breakpoint to where the oscillation starts', () => {
+    // Overshoot exceeds low mean (+10) from the 60% band; breakpoint is 1750
+    const recs = recommendTPAFromThrottleTF(result([5, 8, 12, 25, 35]), {
+      active: true,
+      rate: 65,
+      breakpoint: 1750,
+    });
+    const bpRec = recs.find((r) => r.ruleId === 'TPA-TF-BREAKPOINT');
+    expect(bpRec).toBeDefined();
+    // Onset band starts at 0.6 → 1600 µs
+    expect(bpRec!.recommendedValue).toBe(1600);
+  });
+
+  it('lowers tpa_rate when high throttle is overdamped', () => {
+    const recs = recommendTPAFromThrottleTF(result([18, 15, 8, 2, 1]), {
+      active: true,
+      rate: 65,
+      breakpoint: 1350,
+    });
+    const rateRec = recs.find((r) => r.ruleId === 'TPA-TF-RATE-DOWN');
+    expect(rateRec).toBeDefined();
+    expect(rateRec!.recommendedValue).toBe(55);
+  });
+
+  it('stays silent when the trend is flat', () => {
+    const recs = recommendTPAFromThrottleTF(result([10, 11, 12, 10, 11]), {
+      active: true,
+      rate: 65,
+      breakpoint: 1350,
+    });
+    expect(recs).toHaveLength(0);
+  });
+
+  it('requires tpa_rate from headers and enough bands', () => {
+    expect(recommendTPAFromThrottleTF(result([5, 10, 30, 40, 45]), undefined)).toHaveLength(0);
+    expect(recommendTPAFromThrottleTF(result([5, 10, 30, 40, 45]), { active: true })).toHaveLength(
+      0
+    );
+    // Only 2 bands with data
+    expect(
+      recommendTPAFromThrottleTF(result([5, null, null, null, 40]), { active: true, rate: 65 })
+    ).toHaveLength(0);
+  });
+
+  it('uses the worse of roll and pitch as the driving axis', () => {
+    // Roll flat, pitch grows strongly → pitch drives the recommendation
+    const recs = recommendTPAFromThrottleTF(result([10, 10, 11, 10, 11], [5, 8, 15, 25, 35]), {
+      active: true,
+      rate: 65,
+      breakpoint: 1350,
+    });
+    const rateRec = recs.find((r) => r.ruleId === 'TPA-TF-RATE-UP');
+    expect(rateRec).toBeDefined();
+    expect(rateRec!.reason).toContain('pitch');
+  });
+
+  it('caps tpa_rate at the maximum bound', () => {
+    const recs = recommendTPAFromThrottleTF(result([5, 8, 12, 20, 30]), { active: true, rate: 80 });
+    expect(recs.find((r) => r.ruleId === 'TPA-TF-RATE-UP')).toBeUndefined();
   });
 });

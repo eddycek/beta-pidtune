@@ -1,5 +1,6 @@
 import React from 'react';
 import { RecommendationCard } from './RecommendationCard';
+import { PreviousSessionComparison } from './PreviousSessionComparison';
 import { StepResponseChart } from './charts/StepResponseChart';
 import type { PIDAnalysisResult, AnalysisProgress } from '@shared/types/analysis.types';
 import type { FlightStyle } from '@shared/types/profile.types';
@@ -228,6 +229,8 @@ export function PIDAnalysisStep({
           </>
         )}
 
+        <PreviousSessionComparison mode="pid" pidResult={pidResult} />
+
         {pidResult.recommendations.length > 0 ? (
           <div className="recommendation-list">
             {pidResult.recommendations.map((rec) => (
@@ -239,6 +242,7 @@ export function PIDAnalysisStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
               />
             ))}
           </div>

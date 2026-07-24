@@ -306,3 +306,39 @@ describe('GroupDelayEstimator', () => {
     });
   });
 });
+
+describe('latency budget (P2.7)', () => {
+  it('attaches the per-size budget and over-budget flags', () => {
+    const settings: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf1_static_hz: 60, // heavy filtering → well over 2.5ms at 80 Hz
+      gyro_lpf2_static_hz: 60,
+    };
+    const result = estimateGroupDelay(settings, undefined, '5"');
+    expect(result.gyroBudgetMs).toBe(1.5);
+    expect(result.dtermBudgetMs).toBe(3.0);
+    expect(result.gyroOverBudget).toBe(true);
+    expect(result.warning).toContain('budget');
+    expect(result.warning).toContain('5"');
+  });
+
+  it('uses the default budget when size is unknown', () => {
+    const result = estimateGroupDelay(DEFAULT_FILTER_SETTINGS);
+    expect(result.gyroBudgetMs).toBe(2.0);
+    expect(result.dtermBudgetMs).toBe(3.5);
+  });
+
+  it('reports within-budget for a light chain on a 7-inch quad', () => {
+    const settings: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf1_static_hz: 500,
+      gyro_lpf2_static_hz: 0,
+      dyn_notch_min_hz: 0,
+      dyn_notch_max_hz: 0,
+    };
+    const result = estimateGroupDelay(settings, undefined, '7"');
+    expect(result.gyroBudgetMs).toBe(2.5);
+    expect(result.gyroOverBudget).toBe(false);
+    expect(result.warning).toBeUndefined();
+  });
+});

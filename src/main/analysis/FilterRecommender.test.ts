@@ -1676,3 +1676,128 @@ describe('deduplication vs informational observations', () => {
     expect(observation!.confidence).toBe('low');
   });
 });
+
+describe('LPF2 latency budget (P2.7)', () => {
+  const cleanNoise = () => makeNoiseProfile({ level: 'low', rollFloor: -50, pitchFloor: -50 });
+  const highNoise = () => makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
+
+  function delay(overrides: Partial<import('@shared/types/analysis.types').FilterGroupDelay>) {
+    return {
+      filters: [],
+      gyroTotalMs: 1.0,
+      dtermTotalMs: 2.0,
+      referenceFreqHz: 80,
+      gyroBudgetMs: 1.5,
+      dtermBudgetMs: 3.0,
+      gyroOverBudget: false,
+      dtermOverBudget: false,
+      ...overrides,
+    };
+  }
+
+  it('upgrades the gyro LPF2 disable to high confidence when over budget', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf2_static_hz: 250,
+      rpm_filter_harmonics: 3,
+    };
+    const over = recommend(cleanNoise(), current, '5"', undefined, delay({ gyroOverBudget: true }));
+    expect(over.find((r) => r.ruleId === 'F-LPF2-DIS-GYRO')!.confidence).toBe('high');
+
+    const within = recommend(cleanNoise(), current, '5"', undefined, delay({}));
+    expect(within.find((r) => r.ruleId === 'F-LPF2-DIS-GYRO')!.confidence).toBe('medium');
+  });
+
+  it('includes the measured latency vs budget in the disable reason', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf2_static_hz: 250,
+      rpm_filter_harmonics: 3,
+    };
+    const recs = recommend(cleanNoise(), current, '5"', undefined, delay({ gyroTotalMs: 1.8 }));
+    const rec = recs.find((r) => r.ruleId === 'F-LPF2-DIS-GYRO')!;
+    expect(rec.reason).toContain('1.8 ms');
+    expect(rec.reason).toContain('budget 1.5 ms');
+  });
+
+  it('replaces the gyro LPF2 enable with an informational advisory when it would blow the budget', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf2_static_hz: 0,
+      rpm_filter_harmonics: 0,
+    };
+    // Chain already at 1.4 ms; adding LPF2@250 (~0.6 ms at 80 Hz) exceeds the 1.5 ms 5" budget
+    const recs = recommend(highNoise(), current, '5"', undefined, delay({ gyroTotalMs: 1.4 }));
+    expect(recs.find((r) => r.ruleId === 'F-LPF2-EN-GYRO')).toBeUndefined();
+    const advisory = recs.find((r) => r.ruleId === 'F-LPF2-BUDGET-GYRO');
+    expect(advisory).toBeDefined();
+    expect(advisory!.informational).toBe(true);
+    expect(advisory!.recommendedValue).toBe(0);
+  });
+
+  it('still enables gyro LPF2 when the added delay fits the budget', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf2_static_hz: 0,
+      rpm_filter_harmonics: 0,
+    };
+    // Chain at 0.5 ms; +0.6 ms stays under the 1.5 ms budget
+    const recs = recommend(highNoise(), current, '5"', undefined, delay({ gyroTotalMs: 0.5 }));
+    const rec = recs.find((r) => r.ruleId === 'F-LPF2-EN-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.recommendedValue).toBe(250);
+    expect(rec!.reason).toContain('budget 1.5 ms');
+  });
+
+  it('gates the D-term LPF2 enable against the D-term budget', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dterm_lpf2_static_hz: 0,
+      rpm_filter_harmonics: 0,
+    };
+    // D-term chain at 2.5 ms; +0.83 ms (150 Hz at 80 Hz ref) exceeds the 3.0 ms budget
+    const over = recommend(highNoise(), current, '5"', undefined, delay({ dtermTotalMs: 2.5 }));
+    expect(over.find((r) => r.ruleId === 'F-LPF2-EN-DTERM')).toBeUndefined();
+    expect(over.find((r) => r.ruleId === 'F-LPF2-BUDGET-DTERM')).toBeDefined();
+
+    const within = recommend(highNoise(), current, '5"', undefined, delay({ dtermTotalMs: 1.0 }));
+    expect(within.find((r) => r.ruleId === 'F-LPF2-EN-DTERM')).toBeDefined();
+  });
+
+  it('keeps legacy behavior when no group delay is provided', () => {
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      gyro_lpf2_static_hz: 0,
+      rpm_filter_harmonics: 0,
+    };
+    const recs = recommend(highNoise(), current, '5"');
+    const rec = recs.find((r) => r.ruleId === 'F-LPF2-EN-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.reason).not.toContain('budget');
+  });
+});
+
+describe('recommendation evidence (P3.1)', () => {
+  it('attaches peak evidence with a chart anchor to resonance recommendations', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 160, amplitude: 25, type: 'frame_resonance' }],
+    });
+    const recs = recommend(noise, { ...DEFAULT_FILTER_SETTINGS, dyn_notch_count: 0 });
+    const rec = recs.find((r) => r.ruleId === 'F-RES-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.evidence).toBeDefined();
+    expect(rec!.evidence!.anchorFrequencyHz).toBe(160);
+    expect(rec!.evidence!.measurements.some((m) => m.value.includes('160 Hz'))).toBe(true);
+  });
+
+  it('attaches measured noise floors to noise-floor recommendations', () => {
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -6, pitchFloor: -8 });
+    const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
+    const rec = recs.find((r) => r.ruleId === 'F-NF-H-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.evidence).toBeDefined();
+    expect(rec!.evidence!.measurements.some((m) => m.label === 'Roll noise floor')).toBe(true);
+    expect(rec!.evidence!.trigger).toContain('deadzone');
+  });
+});

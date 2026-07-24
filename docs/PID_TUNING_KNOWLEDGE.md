@@ -348,6 +348,30 @@ Harmonics appear at 2×, 3×, etc. of the fundamental — RPM filter places notc
   - **Multiple equally-spaced peaks** (≥3) = motor harmonic series
 - PIDtoolbox and BF Explorer both show peaks in spectral view
 
+### Throttle-Track Peak Classification (implemented)
+
+The average-spectrum heuristic (equal spacing, frequency bands) is refined with measured
+throttle-tracking evidence when a throttle spectrogram is available
+(`reclassifyPeaksWithThrottle()` in `NoiseAnalyzer.ts`, wired in `FilterAnalyzer.ts`):
+
+- For each detected peak, the peak's local maximum is re-located per throttle band inside a
+  ±30% relative search window (`TRACK_SEARCH_REL_WINDOW = 0.3`), requiring ≥6 dB prominence
+  over the band's local floor (`TRACK_BAND_MIN_PROMINENCE_DB = 6`)
+- Requires ≥3 throttle bands with usable spectra (`HARMONIC_TRACK_MIN_BANDS = 3`)
+- **Tracks throttle** → reclassified `motor_harmonic`: Pearson correlation of band-peak
+  frequency vs throttle ≥ 0.6 (`HARMONIC_TRACK_MIN_CORRELATION`) AND relative frequency range
+  ≥ 15% (`HARMONIC_TRACK_MIN_REL_RANGE`)
+- **Stationary** → reclassified `frame_resonance` (inside the size-aware band) or
+  `electrical` (>500 Hz): relative range ≤ 8% (`STATIONARY_TRACK_MAX_REL_RANGE`)
+- Ambiguous tracks keep their heuristic classification
+- Result is stamped on the peak: `classifiedBy: 'throttle_track' | 'heuristic'`, with the
+  measured `throttleTrack` (throttle midpoints + tracked frequencies) attached for UI/telemetry
+
+*Rationale*: whole-flight average spectra smear RPM-varying motor harmonics, so
+spacing-based heuristics misclassify (e.g. a fixed 600 Hz ESC switching peak landing on a
+harmonic grid). Measured throttle correlation is the physically correct discriminator —
+identical to how PIDtoolbox users read the throttle×frequency spectrogram visually.
+
 ### Throttle Spectrogram
 
 - FFT computed per throttle band (typically 10 bands from 0-100%)
@@ -601,6 +625,7 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 - **Enable gyro LPF2** (F-LPF2-EN-GYRO): When no RPM filter AND noise floor ≥ -20 dB (noisy). Enables at **250 Hz** (house choice — conservative secondary cutoff below the BF default 500 Hz). Extra filtering protects motors.
 - **Enable D-term LPF2** (F-LPF2-EN-DTERM): When noise floor ≥ -20 dB AND LPF2 currently disabled. Enables at **150 Hz**. Extra D-term protection.
 - *Rationale*: LPF2 adds significant phase delay — only worth it when noise level justifies it. With RPM filter + clean noise, LPF2 is counterproductive.
+- **Latency budget (P2.7)**: LPF2 decisions weigh the measured group delay against a per-size budget (`FILTER_LATENCY_BUDGET_BY_SIZE`: gyro/D-term — 5" 1.5/3.0 ms, 3-4"+6" 2.0/3.5, 1"/2.5"+7" 2.5/4.0; default 2.0/3.5 when size unknown; house values anchored on BF "even 1 ms matters"). Disable recs upgrade to **high confidence** when the chain is over budget; enable recs are gated — if adding LPF2 (PT1 at 250/150 Hz, ~0.6/0.8 ms at the 80 Hz reference) would exceed the budget, an informational advisory (F-LPF2-BUDGET-GYRO/DTERM) recommends fixing noise at the source instead. Both directions surface "Filter latency: X ms (budget Y ms)". The GroupDelayEstimator warning is budget-aware (size-specific) instead of the fixed 2 ms.
 
 **Dynamic Lowpass Rules (F-DLPF-*)** — `DynamicLowpassRecommender`:
 - **Enable** (F-DLPF-GYRO / F-DLPF-DTERM): throttle-dependent noise detected — noise increase from low to high throttle ≥ **6 dB**, Pearson throttle-noise correlation ≥ **0.6**, and at least **3 throttle bands** with data. Recommends `dyn_min = current static cutoff`, `dyn_max = static × 2` (BF 2:1 convention). Only fires when dynamic mode is not already active — when it is, the FilterRecommender tunes dyn_min/max directly.
@@ -610,10 +635,47 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 **Rule 5: Motor Harmonic Diagnostic** (when RPM filter active)
 - If motor harmonics still detected at ≥12 dB: emit warning about possible `motor_poles` misconfiguration or ESC telemetry issues
 
+**RPM Filter Tuning Rules (F-RPM-*)** — `RpmFilterRecommender`, only when RPM filter active:
+- **F-RPM-MIN-IDLE**: with dynamic idle active, the motor fundamental never drops below `idleHz = dyn_idle_min_rpm × 100 / 60`. Target `rpm_filter_min_hz = round(idleHz × 0.9)` clamped to 40-150 (`RPM_MIN_HZ_FLOOR/CEILING`), 15 Hz deadzone. Floor **above** idleHz → uncovered low-throttle gap → lower (medium confidence, noise). Floor **far below** → wasted deep notching → raise (low confidence, latency).
+- **F-RPM-MIN-TRACK**: without dynamic-idle info, a measured fundamental track (P2.2 `throttleTrack`) reaching below the current floor proves a coverage gap → lower to `round(minTracked × 0.9)`. Never raises from track data alone (the flight may not have visited low throttle). Medium confidence.
+- **F-RPM-HARM-UP**: a measured track at ~k× the fundamental (ratio within ±0.25 of an integer, `RPM_HARMONIC_RATIO_TOLERANCE`) with k > current `rpm_filter_harmonics` and amplitude ≥12 dB proves an unfiltered harmonic order → raise count to k (max 3). Medium confidence. Suppresses F-MOTOR-DIAG (the residual is explained by the missing notch order, not motor_poles/telemetry issues).
+- **F-RPM-FADE** (informational): `rpm_filter_fade_range_hz = 0` hard-stops notches at the floor → suggest the BF default 50.
+- **F-RPM-WEIGHTS** (informational, BF 4.5+): weights at full depth (100,100,100) → suggest size-appropriate community weights (table in Section 2); only fires when the BBL header reports `rpm_filter_weights` (proof of firmware support).
+- *Rationale*: min_hz/harmonics from **measured** idle floor and harmonic tracks instead of static defaults; latency-aware (never pushes notching below frequencies the motors can reach). Ratios 0.9/±0.25/deadzone 15 Hz are FPVPIDlab house values.
+
 **Rule 7: Yaw-Only Resonance Observation (F-YAW-RES)** — informational
 - Yaw is deliberately excluded from LPF cutoff decisions (inherently noisier; lowering a global LPF for a yaw-only peak taxes roll/pitch latency). But a yaw peak ≥12 dB that the dynamic notch does not cover and that has no roll/pitch counterpart (within 15 Hz) is surfaced as an informational observation — it often indicates a loose FC stack, uneven motor mounting, or yaw-axis frame flex.
 
 **Deduplication**: For overlapping recommendations on same parameter — keep more aggressive value, upgrade confidence if either was 'high'.
+
+### Step Response Metrics Source (Deconvolved vs Per-Step)
+
+PID Tune's headline overshoot/rise/settling come from the **Wiener-deconvolved
+(stacked) step response** (`StepResponseStacker.ts`) when trustworthy, split by
+commanded input magnitude at **500 deg/s** (`INPUT_SPLIT_THRESHOLD_DEG_S`, the
+PIDtoolbox convention — Betaflight's FF/D-setpoint transition behaves
+differently in the two regimes; the high-magnitude group is preferred as it
+exercises P/D). Windows with max |setpoint| < 50 deg/s are excluded (no
+commanded-input information; they only dilute coherence). The mean coherence is
+**input-energy-weighted** (weighted by S_xx per bin over 1-30 Hz) so bins the
+pilot never excited don't drag it down.
+
+Trust gates: ≥2 Welch windows in the group AND weighted coherence ≥ 0.5
+(`DECONV_COHERENCE_GATE`). Otherwise the axis falls back to per-step means
+(`metricsSource: 'per_step'`, the pre-2026-07 behavior).
+
+**Threshold scaling**: the deconvolved estimate is inherently smoother than
+direct per-step measurement — the same physical response reads ≈half the
+overshoot/settling (calibrated on the demo generator's known second-order
+plant; see `DECONV_THRESHOLD_SCALE = 0.5` in constants.ts). When an axis's
+metrics come from deconvolution, overshoot and settling THRESHOLDS are scaled
+by 0.5; rise-time thresholds are unchanged (comparable between methods).
+`PID_STYLE_THRESHOLDS` themselves stay calibrated for per-step values.
+
+**Cross-check**: when both methods produce meaningful overshoot (≥5 pp) and
+disagree by >50% relative, a `step_deconv_disagreement` warning is emitted —
+per-step means on sparse/noisy logs can be dominated by a few bad step
+measurements (observed on real logs: per-step 56% vs deconvolved 2%).
 
 ### PID Recommendation Rules
 
@@ -977,6 +1039,12 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 - **Pattern**: Most presets lower breakpoint to 1250 (from 1350). Larger quads use higher tpa_rate.
 
 **FPVPIDlab `TPA_BY_SIZE`**: small (1-4"): rate 50, breakpoint **1250** (matches whoop/tiny presets); standard (5"): rate 65, breakpoint 1350; large (6-7"): rate 80, breakpoint 1250.
+
+**Measured TF-driven TPA rules (P2.8, implemented)** — Flash Tune only, from the per-throttle-band transfer function (`recommendTPAFromThrottleTF()` in ThrottleTFAnalyzer, roll + pitch, worst axis drives):
+- **TPA-TF-RATE-UP**: measured overshoot grows ≥10 pp from the low- to high-throttle bands (`TPA_TF_OVERSHOOT_DELTA_PP`) → gains too hot up top, raise `tpa_rate` by 10 (cap 80). Medium confidence.
+- **TPA-TF-BREAKPOINT**: with rate-up evidence, the breakpoint is lowered to the throttle where overshoot first exceeds the low-band mean +10 pp (mapped to µs, clamped 1250-1750, 100 µs deadzone). Medium confidence.
+- **TPA-TF-RATE-DOWN**: high-band overshoot < 5% while low bands overshoot ≥10 pp more → overdamped punch-outs, lower `tpa_rate` by 10 (floor 30). Low confidence.
+- Precedence: measured TF rules override the static size-based P-TPA advisory for the same setting; propwash safety rules (PW-TPA-*) always win. Requires `tpa_rate` in BBL headers and ≥3 bands with TF data.
 
 ### Anti-Gravity
 

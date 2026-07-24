@@ -16,6 +16,7 @@ import type { DroneSize, FlightStyle } from '@shared/types/profile.types';
 import type { TransferFunctionMetrics } from './TransferFunctionEstimator';
 import {
   PID_STYLE_THRESHOLDS,
+  DECONV_THRESHOLD_SCALE,
   DAMPING_RATIO_MIN,
   DAMPING_RATIO_MAX,
   DAMPING_RATIO_MAX_MICRO,
@@ -146,8 +147,16 @@ export function recommendPID(
 
     // Yaw is analyzed with relaxed thresholds
     const isYaw = axis === 2;
-    const overshootThreshold = isYaw ? thresholds.overshootMax * 1.5 : thresholds.overshootMax;
-    const moderateOvershoot = isYaw ? thresholds.overshootMax : thresholds.moderateOvershoot;
+    // Deconvolved (stacked) metrics read systematically lower than per-step
+    // measurements for the same physical response — scale overshoot/settling
+    // thresholds accordingly (rise time is comparable, not scaled).
+    const deconvScale = profile.metricsSource === 'deconvolved' ? DECONV_THRESHOLD_SCALE : 1;
+    const overshootThreshold =
+      (isYaw ? thresholds.overshootMax * 1.5 : thresholds.overshootMax) * deconvScale;
+    const moderateOvershoot =
+      (isYaw ? thresholds.overshootMax : thresholds.moderateOvershoot) * deconvScale;
+    const overshootIdealScaled = thresholds.overshootIdeal * deconvScale;
+    const settlingMaxScaled = thresholds.settlingMax * deconvScale;
     const sluggishRiseMs = isYaw ? thresholds.sluggishRise * 1.5 : thresholds.sluggishRise;
     // KB §6: ALL overshoot/ringing thresholds relax ×1.5 for yaw (slower axis, less authority)
     const ringingThreshold = isYaw ? thresholds.ringingMax * 1.5 : thresholds.ringingMax;
@@ -227,10 +236,7 @@ export function recommendPID(
     }
 
     // Rule 2: Sluggish response (low overshoot + slow rise) → increase P (severity-scaled)
-    if (
-      profile.meanOvershoot < thresholds.overshootIdeal &&
-      profile.meanRiseTimeMs > sluggishRiseMs
-    ) {
+    if (profile.meanOvershoot < overshootIdealScaled && profile.meanRiseTimeMs > sluggishRiseMs) {
       const slugSeverity = profile.meanRiseTimeMs / sluggishRiseMs;
       const pStep = slugSeverity > 2 ? 10 : 5;
       const targetP = clamp(base.P + pStep, bounds.pMin, bounds.pMax);
@@ -270,7 +276,7 @@ export function recommendPID(
 
     // Rule 4: Slow settling → might need more D or less I
     if (
-      profile.meanSettlingTimeMs > thresholds.settlingMax &&
+      profile.meanSettlingTimeMs > settlingMaxScaled &&
       profile.meanOvershoot < moderateOvershoot
     ) {
       // Only if overshoot isn't the problem (settling from other causes)
@@ -310,7 +316,7 @@ export function recommendPID(
       }
     } else if (
       ssError < thresholds.steadyStateErrorLow &&
-      profile.meanSettlingTimeMs > thresholds.settlingMax &&
+      profile.meanSettlingTimeMs > settlingMaxScaled &&
       profile.meanOvershoot > moderateOvershoot
     ) {
       // Low error but slow settling + overshoot → I may be causing slow oscillation
@@ -1696,6 +1702,27 @@ export function recommendTPA(
       impact: 'stability',
       confidence: 'medium',
       ruleId: 'PW-TPA-RATE',
+    });
+  }
+
+  // Rule P-TPA-LOW (BF 4.5+): severe propwash + low-throttle TPA disabled → enable.
+  // During propwash descents the motors sit at low RPM where thrust response is
+  // non-linear; low-throttle TPA attenuates gains there (SupaflyFPV presets
+  // enable tpa_low_always). Gated on firmware support: lowAlways is undefined
+  // when the BBL header lacks the BF 4.5+ field.
+  if (pwSevere && tpaContext.lowAlways === 0) {
+    recs.push({
+      setting: 'tpa_low_always',
+      currentValue: 0,
+      recommendedValue: 1,
+      reason:
+        `Severe prop wash detected (${propWash!.meanSeverity.toFixed(1)}× baseline) and ` +
+        'low-throttle TPA is disabled. Enabling tpa_low_always attenuates PID gains in the ' +
+        'non-linear low-RPM region during descents, reducing prop wash oscillation ' +
+        '(community presets enable this on Betaflight 4.5+).',
+      impact: 'stability',
+      confidence: 'low',
+      ruleId: 'P-TPA-LOW',
     });
   }
 

@@ -21,6 +21,14 @@ export interface NoisePeak {
   amplitude: number;
   /** Classification of peak source */
   type: 'frame_resonance' | 'motor_harmonic' | 'electrical' | 'unknown';
+  /** How the classification was determined. 'throttle_track' = the peak's
+   * frequency was regressed against throttle bands (definitive: tracks
+   * throttle = motor, stationary = frame/electrical); 'heuristic' = the
+   * whole-flight equal-spacing/band fallback. */
+  classifiedBy?: 'throttle_track' | 'heuristic';
+  /** Measured frequency track across throttle bands (motor harmonics only) —
+   * feeds RPM-filter recommendations */
+  throttleTrack?: { throttleMid: number[]; frequencyHz: number[] };
 }
 
 /** Noise characteristics for one axis */
@@ -42,6 +50,18 @@ export interface NoiseProfile {
   overallLevel: 'low' | 'medium' | 'high';
 }
 
+/** Structured evidence explaining WHY a recommendation fired (P3.1).
+ * Rendered as a "Why?" block on recommendation cards and used to annotate
+ * charts (e.g. tagging the spectrum peak that triggered a resonance rule). */
+export interface RecommendationEvidence {
+  /** Measured quantities that triggered the rule (pre-formatted values) */
+  measurements: { label: string; value: string }[];
+  /** The rule condition that fired, human-readable */
+  trigger?: string;
+  /** Spectrum-chart anchor: frequency of the peak this rule acted on */
+  anchorFrequencyHz?: number;
+}
+
 /** A single filter recommendation */
 export interface FilterRecommendation {
   /** Betaflight CLI setting name (e.g. "gyro_lpf1_static_hz") */
@@ -60,6 +80,8 @@ export interface FilterRecommendation {
   ruleId?: string;
   /** When true, this recommendation is advisory-only (informational, not auto-applied) */
   informational?: boolean;
+  /** Structured evidence explaining why the rule fired (P3.1) */
+  evidence?: RecommendationEvidence;
 }
 
 /** Data quality score for analysis input data */
@@ -104,7 +126,8 @@ export interface AnalysisWarning {
     | 'verification_dissimilar_steps'
     | 'verification_dissimilar_activity'
     | 'verification_rejected'
-    | 'flat_step_response';
+    | 'flat_step_response'
+    | 'step_deconv_disagreement';
   message: string;
   severity: 'info' | 'warning' | 'error';
 }
@@ -213,6 +236,24 @@ export interface FilterAnalysisResult {
   mechanicalHealth?: MechanicalHealthResult;
   /** Dynamic lowpass analysis (throttle-dependent noise) */
   dynamicLowpass?: DynamicLowpassAnalysis;
+  /** Filter settings the analysis ran against (post BBL-header enrichment) —
+   * lets the renderer overlay the configured filter response on spectra */
+  filterSettings?: CurrentFilterSettings;
+  /** Filter placement optimizer result (P3.3) — latency-optimal discrete
+   * config that still covers every measured peak. Advisory only. */
+  filterPlacement?: {
+    feasible: boolean;
+    best?: {
+      gyro_lpf1_static_hz: number;
+      gyro_lpf2_static_hz: number;
+      dyn_notch_count: number;
+      dyn_notch_q: number;
+      delayMs: number;
+    };
+    currentDelayMs: number;
+    deltaMs?: number;
+    peaks: { frequencyHz: number; amplitudeDb: number }[];
+  };
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
 }
@@ -269,6 +310,14 @@ export interface FilterGroupDelay {
   referenceFreqHz: number;
   /** Warning if total delay exceeds a safe threshold */
   warning?: string;
+  /** Per-size latency budget for the gyro chain in ms (P2.7) */
+  gyroBudgetMs?: number;
+  /** Per-size latency budget for the D-term chain in ms (P2.7) */
+  dtermBudgetMs?: number;
+  /** True when the gyro chain delay exceeds its budget */
+  gyroOverBudget?: boolean;
+  /** True when the D-term chain delay exceeds its budget */
+  dtermOverBudget?: boolean;
 }
 
 /** A steady flight segment identified from throttle/gyro data */
@@ -320,6 +369,12 @@ export interface CurrentFilterSettings {
   dyn_notch_q?: number;
   /** RPM filter Q (notch bandwidth). Undefined if not read. */
   rpm_filter_q?: number;
+  /** RPM filter fade range in Hz below min_hz where notches fade out (CLI-only, BBL header). */
+  rpm_filter_fade_range_hz?: number;
+  /** Per-harmonic RPM notch weights in percent, e.g. [100, 50, 100] (BF 4.5+, BBL header). */
+  rpm_filter_weights?: number[];
+  /** Dynamic idle minimum RPM in hundreds (value × 100 = RPM; 0 = disabled). From BBL header. */
+  dyn_idle_min_rpm?: number;
 
   /** Gyro LPF1 dynamic minimum Hz (>0 means dynamic gyro LPF is active) */
   gyro_lpf1_dyn_min_hz?: number;
@@ -331,6 +386,8 @@ export interface CurrentFilterSettings {
   dterm_lpf1_dyn_max_hz?: number;
   /** D-term LPF1 dynamic expo (0-10, controls how aggressively dynamic LPF tracks throttle) */
   dterm_lpf1_dyn_expo?: number;
+  /** Gyro LPF1 dynamic expo (0-10, BF default 5). From BBL header. */
+  gyro_lpf1_dyn_expo?: number;
 
   /** Gyro LPF1 filter type: 0=PT1, 1=BIQUAD, 2=PT2, 3=PT3 */
   gyro_lpf1_type?: number;
@@ -472,6 +529,37 @@ export interface AxisStepProfile {
   meanSteadyStateError: number;
   /** Mean FF energy ratio across steps that have ffEnergyRatio (0-1) */
   meanFFEnergyRatio?: number;
+  /** Where the headline overshoot/rise/settling numbers came from.
+   * 'deconvolved' = Wiener-stacked step response (preferred when coherent);
+   * 'per_step' = arithmetic mean of individually measured steps (fallback). */
+  metricsSource?: 'deconvolved' | 'per_step';
+  /** Per-step means kept for cross-checking when metricsSource='deconvolved' */
+  perStepMetrics?: {
+    meanOvershoot: number;
+    meanRiseTimeMs: number;
+    meanSettlingTimeMs: number;
+  };
+  /** Deconvolved step response split by commanded input magnitude
+   * (Betaflight's FF/D-setpoint transition behaves differently below vs
+   * above the split threshold, so the two regimes are measured separately) */
+  inputSplit?: {
+    splitThresholdDegS: number;
+    low?: DeconvolvedStepMetrics;
+    high?: DeconvolvedStepMetrics;
+  };
+}
+
+/** Metrics of a Wiener-deconvolved (stacked) step response */
+export interface DeconvolvedStepMetrics {
+  overshootPercent: number;
+  riseTimeMs: number;
+  settlingTimeMs: number;
+  /** Number of Welch windows stacked into this estimate */
+  windowCount: number;
+  /** Mean setpoint→gyro coherence over the stick band (0-1) */
+  coherenceMean?: number;
+  /** Normalized synthetic step response for chart rendering */
+  stepResponse?: { timeMs: number[]; response: number[] };
 }
 
 /** A single PID recommendation */
@@ -493,6 +581,8 @@ export interface PIDRecommendation {
   informational?: boolean;
   /** Structured rule identifier for telemetry tracking (e.g. "P-OS-D-roll") */
   ruleId?: string;
+  /** Structured evidence explaining why the rule fired (P3.1) */
+  evidence?: RecommendationEvidence;
 }
 
 /** Bayesian optimizer suggestion for next PID gains to try */
@@ -571,6 +661,29 @@ export interface PIDAnalysisResult {
       overshootPercent: number;
       phaseMarginDeg: number;
     };
+    /** Pitch-axis per-band analysis (P2.8) — same band/variance shape as roll */
+    pitch?: {
+      bands: {
+        throttleMin: number;
+        throttleMax: number;
+        sampleCount: number;
+        metrics: {
+          bandwidthHz: number;
+          phaseMarginDeg: number;
+          gainMarginDb: number;
+          overshootPercent: number;
+          settlingTimeMs: number;
+          riseTimeMs: number;
+          dcGainDb: number;
+        } | null;
+      }[];
+      bandsWithData: number;
+      metricsVariance: {
+        bandwidthHz: number;
+        overshootPercent: number;
+        phaseMarginDeg: number;
+      };
+    };
     tpaWarning?: string;
   };
   /** Full transfer function data (present only for Flash Tune / Wiener deconvolution analysis).
@@ -585,16 +698,22 @@ export interface PIDAnalysisResult {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
     pitch: {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
     yaw: {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
   };
   /** Per-axis transfer function metrics (only present for Wiener deconvolution analysis) */
@@ -605,6 +724,39 @@ export interface PIDAnalysisResult {
   };
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
+  /** System identification + what-if prediction (P3.2, Flash Tune only).
+   * Present only when the plant fit passed the coherence and quality gates.
+   * Always a PREDICTION — computed by re-closing the identified plant model
+   * with the proposed gains, never a measurement. */
+  whatIf?: {
+    roll?: AxisWhatIfPrediction;
+    pitch?: AxisWhatIfPrediction;
+    /** The gains the 'proposed' predictions were computed with */
+    proposedPIDs: PIDConfiguration;
+  };
+}
+
+/** Per-axis what-if prediction (P3.2) */
+export interface AxisWhatIfPrediction {
+  /** Identified plant model (2nd order + delay) */
+  plant: {
+    gainK: number;
+    naturalFreqHz: number;
+    damping: number;
+    delayMs: number;
+    fitQuality: number;
+  };
+  /** Prediction with the current flight gains (sanity anchor vs measured) */
+  current: WhatIfPredictedResponse;
+  /** Prediction with the proposed gains */
+  proposed: WhatIfPredictedResponse;
+}
+
+/** One predicted closed-loop response (P3.2) */
+export interface WhatIfPredictedResponse {
+  pids: { P: number; I: number; D: number };
+  response: { timeMs: number[]; response: number[] };
+  metrics: AxisTransferFunctionMetrics;
 }
 
 /** Per-axis transfer function metrics (mirrors TransferFunctionEstimator.TransferFunctionMetrics) */
@@ -727,12 +879,17 @@ export interface DynamicLowpassAnalysis {
 // ---- Mechanical Health Types ----
 
 /** Severity of a mechanical health issue */
-export type HealthSeverity = 'ok' | 'warning' | 'critical';
+export type HealthSeverity = 'ok' | 'info' | 'warning' | 'critical';
 
 /** A detected mechanical health issue */
 export interface MechanicalHealthIssue {
   /** Type of detected issue */
-  type: 'extreme_noise' | 'axis_asymmetry' | 'motor_imbalance';
+  type:
+    | 'extreme_noise'
+    | 'axis_asymmetry'
+    | 'motor_imbalance'
+    | 'motor_prop_signature'
+    | 'motor_bearing_signature';
   /** Severity level */
   severity: HealthSeverity;
   /** Human-readable description */
@@ -743,6 +900,9 @@ export interface MechanicalHealthIssue {
   measuredValue: number;
   /** Threshold that was exceeded */
   threshold: number;
+  /** Experimental per-motor spectral signature (P3.4) — thresholds are still
+   * being calibrated via telemetry; treat as a hint, not a diagnosis */
+  experimental?: boolean;
 }
 
 /** Mechanical health diagnostic result */

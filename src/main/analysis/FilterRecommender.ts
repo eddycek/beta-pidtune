@@ -9,6 +9,8 @@ import type {
   FilterRecommendation,
   CurrentFilterSettings,
   NoisePeak,
+  FilterGroupDelay,
+  RecommendationEvidence,
 } from '@shared/types/analysis.types';
 import { DEFAULT_FILTER_SETTINGS } from '@shared/types/analysis.types';
 import type { DroneSize, FlightStyle } from '@shared/types/profile.types';
@@ -41,6 +43,12 @@ import {
   MAX_VARIABILITY_BONUS_HZ,
   VARIABILITY_TO_HZ_SCALE,
 } from './constants';
+import { recommendRpmFilterTuning } from './RpmFilterRecommender';
+import {
+  pt1GroupDelay,
+  resolveLatencyBudget,
+  GROUP_DELAY_REFERENCE_HZ,
+} from './GroupDelayEstimator';
 
 /** Optional noise variability context for hysteresis-aware deadzone */
 export interface ConfidenceContext {
@@ -74,7 +82,8 @@ export function recommend(
   noise: NoiseProfile,
   current: CurrentFilterSettings = DEFAULT_FILTER_SETTINGS,
   droneSize?: DroneSize,
-  confidenceContext?: ConfidenceContext
+  confidenceContext?: ConfidenceContext,
+  groupDelay?: FilterGroupDelay
 ): FilterRecommendation[] {
   const recommendations: FilterRecommendation[] = [];
   const rpmActive = isRpmFilterActive(current);
@@ -93,15 +102,24 @@ export function recommend(
     recommendDynamicNotchForRPM(noise, current, recommendations, droneSize);
   }
 
-  // 5. Motor harmonic diagnostic (when RPM active but motor harmonics still detected)
+  // 5. RPM filter tuning rules (min_hz / harmonics / fade / weights) from
+  // measured harmonic tracks and the dynamic-idle floor
   if (rpmActive) {
+    recommendations.push(...recommendRpmFilterTuning(noise, current, droneSize));
+  }
+
+  // 6. Motor harmonic diagnostic (when RPM active but motor harmonics still detected).
+  // Skipped when a harmonic-count increase was recommended — the residual harmonic
+  // is explained by the missing notch order, not by motor_poles/telemetry issues.
+  if (rpmActive && !recommendations.some((r) => r.ruleId === 'F-RPM-HARM-UP')) {
     recommendMotorHarmonicDiagnostic(noise, recommendations);
   }
 
-  // 6. LPF2 recommendations (disable when clean + RPM, enable when noisy)
-  recommendLpf2Adjustments(noise, current, recommendations, rpmActive);
+  // 7. LPF2 recommendations (disable when clean + RPM, enable when noisy),
+  // weighed against the per-size filter latency budget when delay data exists
+  recommendLpf2Adjustments(noise, current, recommendations, rpmActive, groupDelay, droneSize);
 
-  // 7. Yaw-only resonance observation (informational — yaw never drives LPF cutoffs)
+  // 8. Yaw-only resonance observation (informational — yaw never drives LPF cutoffs)
   recommendYawResonanceObservation(noise, current, recommendations);
 
   // Deduplicate: if multiple rules recommend the same setting, keep the more aggressive one
@@ -149,6 +167,15 @@ function recommendYawResonanceObservation(
       'inspect hardware, or extend the dynamic notch range to cover it.',
     impact: 'noise',
     confidence: 'low',
+    evidence: {
+      measurements: [
+        { label: 'Yaw peak frequency', value: `${Math.round(strongest.frequency)} Hz` },
+        { label: 'Amplitude', value: `${Math.round(strongest.amplitude)} dB above floor` },
+      ],
+      trigger:
+        'Yaw-only peak ≥ 12 dB with no roll/pitch counterpart within 15 Hz, outside the dynamic notch range',
+      anchorFrequencyHz: strongest.frequency,
+    },
     informational: true,
     ruleId: 'F-YAW-RES',
   });
@@ -236,6 +263,19 @@ function recommendNoiseFloorAdjustments(
     ? (current.dterm_lpf1_dyn_min_hz ?? current.dterm_lpf1_static_hz)
     : current.dterm_lpf1_static_hz;
 
+  // Structured evidence shared by the noise-floor rules (P3.1)
+  const noiseFloorEvidence = (target: number): RecommendationEvidence => ({
+    measurements: [
+      { label: 'Roll noise floor', value: `${noise.roll.noiseFloorDb.toFixed(1)} dB` },
+      { label: 'Pitch noise floor', value: `${noise.pitch.noiseFloorDb.toFixed(1)} dB` },
+      { label: 'Computed target cutoff', value: `${target} Hz` },
+    ],
+    trigger:
+      `Worst roll/pitch noise floor ${worstFloor.toFixed(1)} dB maps to a ${target} Hz target ` +
+      `(scale: ${NOISE_FLOOR_VERY_NOISY_DB} dB → tightest, ${NOISE_FLOOR_VERY_CLEAN_DB} dB → most open); ` +
+      `current cutoff differs by more than the ${Math.round(baseDeadzone)} Hz deadzone`,
+  });
+
   // Helper: push gyro LPF1 recommendation (static or dynamic mode)
   const pushGyroRec = (
     target: number,
@@ -244,6 +284,7 @@ function recommendNoiseFloorAdjustments(
     confidence: FilterRecommendation['confidence'],
     ruleId: string
   ) => {
+    const evidence = noiseFloorEvidence(target);
     if (gyroLpfDisabled) return;
     if (gyroDynActive) {
       // Dynamic mode: tune dyn_min_hz, use BF 2:1 ratio for dyn_max_hz
@@ -265,6 +306,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
         out.push({
           setting: 'gyro_lpf1_dyn_max_hz',
@@ -299,6 +341,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
       }
     }
@@ -312,6 +355,7 @@ function recommendNoiseFloorAdjustments(
     confidence: FilterRecommendation['confidence'],
     ruleId: string
   ) => {
+    const evidence = noiseFloorEvidence(target);
     if (dtermDynActive) {
       const currentMin = current.dterm_lpf1_dyn_min_hz!;
       const currentMax = current.dterm_lpf1_dyn_max_hz ?? currentMin * DYNAMIC_LOWPASS_RATIO;
@@ -331,6 +375,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
         out.push({
           setting: 'dterm_lpf1_dyn_max_hz',
@@ -363,6 +408,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
       }
     }
@@ -540,6 +586,7 @@ function recommendResonanceFixes(
         : `A strong ${typeLabel} was detected at ${Math.round(lowestPeakFreq)} Hz, which is below your current ` +
           `gyro filter cutoff of ${effectiveGyroCutoff} Hz. Lowering the filter will block this vibration.`;
 
+      const peakForEvidence = peaksNeedingLpf.find((p) => p.frequency === lowestPeakFreq);
       out.push({
         setting: settingName,
         currentValue: effectiveGyroCutoff,
@@ -548,6 +595,20 @@ function recommendResonanceFixes(
         impact: 'both',
         confidence: 'high',
         ruleId: 'F-RES-GYRO',
+        evidence: {
+          measurements: [
+            { label: 'Peak frequency', value: `${Math.round(lowestPeakFreq)} Hz` },
+            {
+              label: 'Peak amplitude',
+              value: `${Math.round(peakForEvidence?.amplitude ?? 0)} dB above floor`,
+            },
+            { label: 'Classified as', value: typeLabel },
+          ],
+          trigger:
+            `Peak ≥ ${RESONANCE_ACTION_THRESHOLD_DB} dB outside the dynamic notch range and below ` +
+            `the effective gyro cutoff — target = peak − ${RESONANCE_CUTOFF_MARGIN_HZ} Hz margin`,
+          anchorFrequencyHz: lowestPeakFreq,
+        },
       });
     }
   }
@@ -619,6 +680,11 @@ function recommendDynamicNotchAdjustments(
         impact: 'noise',
         confidence: 'medium',
         ruleId: 'F-DN-MIN',
+        evidence: {
+          measurements: [{ label: 'Lowest uncovered peak', value: `${Math.round(lowestPeak)} Hz` }],
+          trigger: `Peak below dyn_notch_min_hz (${current.dyn_notch_min_hz} Hz) — notch cannot track it`,
+          anchorFrequencyHz: lowestPeak,
+        },
       });
     }
   }
@@ -859,76 +925,133 @@ function recommendMotorHarmonicDiagnostic(noise: NoiseProfile, out: FilterRecomm
 
 /**
  * Rule 6: Recommend LPF2 adjustments:
- * - With RPM filter + clean noise: disable LPF2 for less latency
- * - Without RPM + high noise + LPF2 disabled: warn to enable
+ * - With RPM filter + clean noise: disable LPF2 for less latency. When the
+ *   measured chain delay is over the per-size latency budget, the disable
+ *   is upgraded to high confidence (P2.7).
+ * - Without RPM + high noise + LPF2 disabled: recommend enabling — unless
+ *   the added delay would blow the latency budget, in which case an
+ *   informational "fix noise at the source" advisory is emitted instead.
  */
 function recommendLpf2Adjustments(
   noise: NoiseProfile,
   current: CurrentFilterSettings,
   out: FilterRecommendation[],
-  rpmActive: boolean
+  rpmActive: boolean,
+  groupDelay?: FilterGroupDelay,
+  droneSize?: DroneSize
 ): void {
   const worstFloor = Math.max(noise.roll.noiseFloorDb, noise.pitch.noiseFloorDb);
+  const budget = resolveLatencyBudget(droneSize);
+  const latencyNote = (totalMs: number | undefined, budgetMs: number): string =>
+    totalMs !== undefined
+      ? ` Filter latency: ${totalMs.toFixed(1)} ms (budget ${budgetMs.toFixed(1)} ms).`
+      : '';
 
   // Clean signal + RPM active → disable LPF2 for less phase delay
   if (rpmActive && worstFloor < GYRO_LPF2_DISABLE_THRESHOLD_DB) {
     if (current.gyro_lpf2_static_hz > 0) {
+      const overBudget = groupDelay?.gyroOverBudget === true;
       out.push({
         setting: 'gyro_lpf2_static_hz',
         currentValue: current.gyro_lpf2_static_hz,
         recommendedValue: 0,
         reason:
           'With RPM filter active and very clean gyro data, the second gyro lowpass filter can be ' +
-          'disabled to reduce phase delay and improve response.',
+          'disabled to reduce phase delay and improve response.' +
+          latencyNote(groupDelay?.gyroTotalMs, budget.gyroMs),
         impact: 'latency',
-        confidence: 'medium',
+        confidence: overBudget ? 'high' : 'medium',
         ruleId: 'F-LPF2-DIS-GYRO',
       });
     }
   }
   if (rpmActive && worstFloor < DTERM_LPF2_DISABLE_THRESHOLD_DB) {
     if (current.dterm_lpf2_static_hz > 0) {
+      const overBudget = groupDelay?.dtermOverBudget === true;
       out.push({
         setting: 'dterm_lpf2_static_hz',
         currentValue: current.dterm_lpf2_static_hz,
         recommendedValue: 0,
         reason:
           'With RPM filter active and low noise, the second D-term lowpass filter can be ' +
-          'disabled to reduce latency and improve stick feel.',
+          'disabled to reduce latency and improve stick feel.' +
+          latencyNote(groupDelay?.dtermTotalMs, budget.dtermMs),
         impact: 'latency',
-        confidence: 'medium',
+        confidence: overBudget ? 'high' : 'medium',
         ruleId: 'F-LPF2-DIS-DTERM',
       });
     }
   }
 
-  // High noise + no RPM + LPF2 disabled → recommend enabling
+  // High noise + no RPM + LPF2 disabled → recommend enabling, if the added
+  // delay fits the latency budget; otherwise point at the noise source instead
   if (!rpmActive && noise.overallLevel === 'high') {
     if (current.gyro_lpf2_static_hz === 0) {
-      out.push({
-        setting: 'gyro_lpf2_static_hz',
-        currentValue: 0,
-        recommendedValue: 250,
-        reason:
-          'High noise detected without RPM filter. Enabling the second gyro lowpass filter ' +
-          'provides additional noise rejection that helps with motor temperatures.',
-        impact: 'noise',
-        confidence: 'low',
-        ruleId: 'F-LPF2-EN-GYRO',
-      });
+      const addedMs = pt1GroupDelay(250, GROUP_DELAY_REFERENCE_HZ) * 1000;
+      const prospectiveMs = groupDelay !== undefined ? groupDelay.gyroTotalMs + addedMs : undefined;
+      if (prospectiveMs !== undefined && prospectiveMs > budget.gyroMs) {
+        out.push({
+          setting: 'gyro_lpf2_static_hz',
+          currentValue: 0,
+          recommendedValue: 0,
+          reason:
+            'High noise detected without RPM filter, but enabling a second gyro lowpass would push ' +
+            `filter latency to ${prospectiveMs.toFixed(1)} ms — over the ${budget.gyroMs.toFixed(1)} ms ` +
+            'budget for this quad size. Fix the noise at its source instead: check props/bearings, ' +
+            'consider RPM filtering (bidirectional DSHOT), or soft-mount the flight controller.',
+          impact: 'noise',
+          confidence: 'low',
+          informational: true,
+          ruleId: 'F-LPF2-BUDGET-GYRO',
+        });
+      } else {
+        out.push({
+          setting: 'gyro_lpf2_static_hz',
+          currentValue: 0,
+          recommendedValue: 250,
+          reason:
+            'High noise detected without RPM filter. Enabling the second gyro lowpass filter ' +
+            'provides additional noise rejection that helps with motor temperatures.' +
+            latencyNote(prospectiveMs, budget.gyroMs),
+          impact: 'noise',
+          confidence: 'low',
+          ruleId: 'F-LPF2-EN-GYRO',
+        });
+      }
     }
     if (current.dterm_lpf2_static_hz === 0) {
-      out.push({
-        setting: 'dterm_lpf2_static_hz',
-        currentValue: 0,
-        recommendedValue: 150,
-        reason:
-          'High noise detected without RPM filter. Enabling the second D-term lowpass filter ' +
-          'helps reduce motor heating from noisy D-term output.',
-        impact: 'noise',
-        confidence: 'low',
-        ruleId: 'F-LPF2-EN-DTERM',
-      });
+      const addedMs = pt1GroupDelay(150, GROUP_DELAY_REFERENCE_HZ) * 1000;
+      const prospectiveMs =
+        groupDelay !== undefined ? groupDelay.dtermTotalMs + addedMs : undefined;
+      if (prospectiveMs !== undefined && prospectiveMs > budget.dtermMs) {
+        out.push({
+          setting: 'dterm_lpf2_static_hz',
+          currentValue: 0,
+          recommendedValue: 0,
+          reason:
+            'High noise detected without RPM filter, but enabling a second D-term lowpass would push ' +
+            `D-term filter latency to ${prospectiveMs.toFixed(1)} ms — over the ${budget.dtermMs.toFixed(1)} ms ` +
+            'budget for this quad size. Fix the noise at its source instead: check props/bearings, ' +
+            'consider RPM filtering (bidirectional DSHOT), or soft-mount the flight controller.',
+          impact: 'noise',
+          confidence: 'low',
+          informational: true,
+          ruleId: 'F-LPF2-BUDGET-DTERM',
+        });
+      } else {
+        out.push({
+          setting: 'dterm_lpf2_static_hz',
+          currentValue: 0,
+          recommendedValue: 150,
+          reason:
+            'High noise detected without RPM filter. Enabling the second D-term lowpass filter ' +
+            'helps reduce motor heating from noisy D-term output.' +
+            latencyNote(prospectiveMs, budget.dtermMs),
+          impact: 'noise',
+          confidence: 'low',
+          ruleId: 'F-LPF2-EN-DTERM',
+        });
+      }
     }
   }
 }

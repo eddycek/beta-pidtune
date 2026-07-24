@@ -27,12 +27,24 @@ import type {
   FilterGroupDelay,
   SingleFilterDelay,
 } from '@shared/types/analysis.types';
+import type { DroneSize } from '@shared/types/profile.types';
+import {
+  FILTER_LATENCY_BUDGET_BY_SIZE,
+  FILTER_LATENCY_BUDGET_DEFAULT,
+  type FilterLatencyBudget,
+} from './constants';
 
 /** Default reference frequency for group delay computation (Hz) */
 export const GROUP_DELAY_REFERENCE_HZ = 80;
 
-/** Group delay threshold above which a warning is issued (ms) */
+/** Group delay threshold above which a warning is issued (ms) — legacy
+ * fallback; the per-size budgets in constants.ts take precedence. */
 export const GROUP_DELAY_WARNING_MS = 2.0;
+
+/** Resolve the latency budget for a drone size (default when size unknown) */
+export function resolveLatencyBudget(droneSize?: DroneSize): FilterLatencyBudget {
+  return (droneSize && FILTER_LATENCY_BUDGET_BY_SIZE[droneSize]) || FILTER_LATENCY_BUDGET_DEFAULT;
+}
 
 /**
  * Compute group delay of a first-order PT1 lowpass filter at a given frequency.
@@ -119,11 +131,14 @@ export function notchGroupDelay(notchHz: number, freqHz: number, Q: number = 3.0
  *
  * @param settings - Current filter settings from the FC
  * @param referenceHz - Frequency at which to compute delay (default: 80 Hz)
+ * @param droneSize - When provided, delay is judged against the per-size
+ *   latency budget (P2.7) instead of the fixed 2 ms threshold
  * @returns Group delay breakdown
  */
 export function estimateGroupDelay(
   settings: CurrentFilterSettings,
-  referenceHz: number = GROUP_DELAY_REFERENCE_HZ
+  referenceHz: number = GROUP_DELAY_REFERENCE_HZ,
+  droneSize?: DroneSize
 ): FilterGroupDelay {
   const filters: SingleFilterDelay[] = [];
   let gyroTotalS = 0;
@@ -201,9 +216,16 @@ export function estimateGroupDelay(
   const gyroTotalMs = gyroTotalS * 1000;
   const dtermTotalMs = dtermTotalS * 1000;
 
+  const budget = resolveLatencyBudget(droneSize);
+  const gyroOverBudget = gyroTotalMs > budget.gyroMs;
+  const dtermOverBudget = dtermTotalMs > budget.dtermMs;
+
   let warning: string | undefined;
-  if (gyroTotalMs > GROUP_DELAY_WARNING_MS) {
-    warning = `Gyro filter chain adds ${gyroTotalMs.toFixed(1)}ms of delay at ${referenceHz} Hz — this may cause sluggish response. Consider raising cutoff frequencies or using RPM filter to reduce reliance on software filters.`;
+  if (gyroOverBudget) {
+    warning =
+      `Gyro filter chain adds ${gyroTotalMs.toFixed(1)}ms of delay at ${referenceHz} Hz — ` +
+      `over the ${budget.gyroMs.toFixed(1)}ms latency budget${droneSize ? ` for a ${droneSize} quad` : ''}. ` +
+      'This may cause sluggish response. Consider raising cutoff frequencies or using RPM filter to reduce reliance on software filters.';
   }
 
   return {
@@ -212,5 +234,9 @@ export function estimateGroupDelay(
     dtermTotalMs: Math.round(dtermTotalMs * 100) / 100,
     referenceFreqHz: referenceHz,
     ...(warning ? { warning } : {}),
+    gyroBudgetMs: budget.gyroMs,
+    dtermBudgetMs: budget.dtermMs,
+    gyroOverBudget,
+    dtermOverBudget,
   };
 }

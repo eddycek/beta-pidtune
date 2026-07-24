@@ -35,6 +35,7 @@ Key components:
 - **useTuningWizard hook**: State management for parse/filter/PID analysis and apply lifecycle
 - **WizardProgress**: Visual step indicator, dynamic step filtering by mode
 - **Step components**: TestFlightGuideStep (renders FlightGuideContent), SessionSelectStep, FilterAnalysisStep, PIDAnalysisStep, QuickAnalysisStep (Flash Tune), TuningSummaryStep
+- **PreviousSessionComparison** (P2.4): shown inside FilterAnalysisStep/PIDAnalysisStep when the profile has archived history — overlays the last completed session's compact spectrum (NoiseComparisonChart) or step metrics (StepResponseComparison) against the current analysis. Prefers the previous session's verification-flight metrics; refuses cross-scale (`spectrumScaleVersion`) and cross-method (`metricsSource` per-step vs deconvolved) comparisons with an explanatory note
 - **ApplyConfirmationModal**: Confirmation dialog (snapshot option, reboot warning)
 - **RecommendationCard**: Shared component used across analysis steps (FilterAnalysisStep, PIDAnalysisStep, QuickAnalysisStep)
 - Flight guide data in `src/shared/constants/flightGuide.ts`
@@ -43,11 +44,12 @@ Key components:
 
 Interactive visualization using Recharts (SVG).
 
-- **SpectrumChart**: FFT noise spectrum with per-axis color coding, noise floor reference lines, peak frequency markers
+- **SpectrumChart**: FFT noise spectrum with per-axis color coding, noise floor reference lines, peak frequency markers. Optional `filterSettings` prop overlays the configured gyro/D-term filter-chain response (right axis, attenuation dB; models from `@shared/utils/filterResponse`) and shades the dynamic notch range
 - **StepResponseChart**: Setpoint vs gyro trace for individual steps, Prev/Next navigation, metrics overlay
 - **TFStepResponseChart**: Synthetic step response from Transfer Function (Wiener deconvolution). Single/comparison modes
-- **BodePlot**: Frequency response visualization (magnitude + phase). Used in AnalysisOverview and analysis steps
-- **ThrottleSpectrogramChart**: Custom SVG heatmap — noise magnitude (dB) across frequency × throttle bands. Accepts both live `data` and `compactData` props
+- **BodePlot**: Frequency response visualization (magnitude + phase + coherence γ² when present, with the 0.5 recommendation-gate line). Used in AnalysisOverview and analysis steps
+- **RecommendationCard** renders the structured `evidence` block (P3.1) — collapsible "Why? Measured evidence" list of measurements + trigger; SpectrumChart tags peaks with the ruleId whose `evidence.anchorFrequencyHz` matches (±8 Hz) via its optional `recommendations` prop
+- **ThrottleSpectrogramChart**: Custom SVG heatmap — noise magnitude (dB) across frequency × throttle bands. Accepts both live `data` and `compactData` props. Optional `filterSettings` prop overlays the gyro LPF1 cutoff line (dynamic LPF traces its throttle curve across bands)
 - **AxisTabs**: Shared tab selector (Roll/Pitch/Yaw/All). Supports `showAll` prop for spectrogram views
 - **chartUtils**: Data conversion (Float64Array → Recharts format), downsampling, findBestStep scoring
 - **StepResponseTrace**: Raw trace data extracted in `StepMetrics.computeStepResponse()`

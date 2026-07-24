@@ -166,3 +166,46 @@ describe('RecommendationCard', () => {
     expect(screen.getByText('+15')).toBeInTheDocument();
   });
 });
+
+describe('RecommendationCard evidence (P3.1)', () => {
+  it('renders the measured-evidence block when evidence is provided', () => {
+    render(
+      <RecommendationCard
+        setting="gyro_lpf1_static_hz"
+        currentValue={250}
+        recommendedValue={120}
+        reason="Strong resonance detected"
+        impact="both"
+        confidence="high"
+        evidence={{
+          measurements: [
+            { label: 'Peak frequency', value: '160 Hz' },
+            { label: 'Peak amplitude', value: '25 dB above floor' },
+          ],
+          trigger: 'Peak ≥ 12 dB below the effective cutoff',
+          anchorFrequencyHz: 160,
+        }}
+      />
+    );
+
+    expect(screen.getByText('Why? Measured evidence')).toBeInTheDocument();
+    expect(screen.getByText('Peak frequency:')).toBeInTheDocument();
+    expect(screen.getByText(/160 Hz/)).toBeInTheDocument();
+    expect(screen.getByText('Peak ≥ 12 dB below the effective cutoff')).toBeInTheDocument();
+  });
+
+  it('omits the evidence block when no evidence is provided', () => {
+    render(
+      <RecommendationCard
+        setting="gyro_lpf1_static_hz"
+        currentValue={250}
+        recommendedValue={120}
+        reason="Strong resonance detected"
+        impact="both"
+        confidence="high"
+      />
+    );
+
+    expect(screen.queryByText('Why? Measured evidence')).not.toBeInTheDocument();
+  });
+});

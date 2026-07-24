@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3243 unit tests across 147 files (3220 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3372 unit tests across 154 files (3349 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -192,18 +192,19 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `TuningWizard/TuningWizard.test.tsx` | 46 | Multi-step wizard flow, results display, apply, mode-aware routing, onApplyComplete with metrics, FF warning, RPM status, flight style display |
 | `TuningWizard/FlightGuideContent.test.tsx` | 11 | Flight guide content rendering, version-aware tip filtering |
 | `TuningWizard/TestFlightGuideStep.test.tsx` | 5 | Flight guide step integration |
+| `TuningWizard/PreviousSessionComparison.test.tsx` | 6 | Before/after comparison vs last completed session: noise + step comparisons rendered, cross-scale and cross-method guards, empty history, verification-metrics preference |
 | `TuningWizard/PhaseIllustration.test.tsx` | 11 | Phase illustration SVG rendering, custom size, aria-hidden, unknown title fallback |
 | `TuningWorkflowModal/TuningWorkflowModal.test.tsx` | 23 | Workflow preparation modal, 3-tab layout (Filter/PID/Flash), mode-aware step filtering, flight guide sections |
 | `AnalysisOverview/AnalysisOverview.test.tsx` | 39 | Diagnostic-only analysis view, auto-parse, session picker, breadcrumb navigation, session metadata, FF warning, RPM status, data quality pill, TF analysis, wind disturbance pill, mechanical health warnings |
 | `TuningWizard/PIDAnalysisStep.test.tsx` | 10 | PID results display, flight style pill, step count pluralization, data quality pill |
-| `TuningWizard/RecommendationCard.test.tsx` | 11 | Setting label lookup, value display, change percentage, confidence, feedforward labels |
+| `TuningWizard/RecommendationCard.test.tsx` | 13 | Setting label lookup, value display, change percentage, confidence, feedforward labels, measured-evidence block (rendered/omitted) |
 | `TuningWizard/ApplyConfirmationModal.test.tsx` | 8 | Change counts, confirm/cancel, reboot warning |
-| `TuningWizard/QuickAnalysisStep.test.tsx` | 6 | Quick analysis dual-panel (filter + TF), auto-run, progress, retry |
+| `TuningWizard/QuickAnalysisStep.test.tsx` | 8 | Quick analysis dual-panel (filter + TF), auto-run, progress, retry, what-if predicted-response section (rendered/omitted) |
 | `TuningWizard/WizardProgress.test.tsx` | 10 | Step indicator, mode-aware filtering (filter/pid/quick), current/done/upcoming states |
 | `TuningWizard/SessionSelectStep.test.tsx` | 8 | Session picker, auto-parse, parsing/error/empty states, reverse order |
 | `TuningWizard/TuningSummaryStep.test.tsx` | 17 | Recommendations table, mode-aware labels (filter/pid/quick), apply/progress/success/error states, tfResult for quick mode |
 | `TuningWizard/charts/AxisTabs.test.tsx` | 6 | Tab rendering, selection, aria-selected, onChange callback |
-| `TuningWizard/charts/ThrottleSpectrogramChart.test.tsx` | 10 | Throttle spectrogram heatmap rendering, axis labels, color scale, empty state, compact data (archived) rendering |
+| `TuningWizard/charts/ThrottleSpectrogramChart.test.tsx` | 12 | Throttle spectrogram heatmap rendering, axis labels, color scale, empty state, compact data (archived) rendering, gyro LPF1 cutoff overlay (rendered/disabled/out-of-range) |
 | `TuningHistory/AppliedChangesTable.test.tsx` | 7 | Setting changes table, percent formatting, empty state, zero value handling |
 | `TuningHistory/NoiseComparisonChart.test.tsx` | 9 | Before/after spectrum overlay, delta pill, axis tabs, empty state |
 | `TuningHistory/TuningCompletionSummary.test.tsx` | 27 | Completion summary with/without verification, noise chart, spectrogram comparison (Filter Tune), step response comparison (PID Tune), changes, PID metrics, actions, quality score badge with tier label, re-analyze button, mode-aware titles, smart suggestion buttons, convergence banner, iteration warning, previous session reference display |
@@ -231,9 +232,9 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | File | Tests | Description |
 |------|-------|-------------|
 | `TuningWizard/charts/chartUtils.test.ts` | 20 | Data conversion, downsampling, findBestStep, robust Y domain |
-| `TuningWizard/charts/SpectrumChart.test.tsx` | 5 | FFT spectrum chart rendering |
+| `TuningWizard/charts/SpectrumChart.test.tsx` | 11 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0), rule-anchor peak tagging (tagged/untagged) |
 | `TuningWizard/charts/StepResponseChart.test.tsx` | 10 | Step response chart rendering, navigation |
-| `TuningWizard/charts/BodePlot.test.tsx` | 4 | Bode plot (magnitude + phase) rendering for transfer function |
+| `TuningWizard/charts/BodePlot.test.tsx` | 6 | Bode plot (magnitude + phase) rendering for transfer function, coherence γ² section (rendered with data, omitted without) |
 | `TuningWizard/charts/TFStepResponseChart.test.tsx` | 6 | TF synthetic step response chart, single/comparison modes, overshoot metrics, delta pill |
 
 ### Contexts
@@ -359,12 +360,15 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 |------|-------|-------------|
 | `analysis/FFTCompute.test.ts` | 24 | Hanning window, Welch's method, sine detection, calibrated v2 power-spectrum scale (detrending, power-domain averaging, known-amplitude sine reads 10·log10(A²/2)) |
 | `analysis/SegmentSelector.test.ts` | 31 | Hover detection, throttle sweep detection, throttle normalization, yaw steadiness gating (1.5× threshold) |
-| `analysis/NoiseAnalyzer.test.ts` | 36 | Peak detection (plateau handling, 15 Hz min spacing, parabolic sub-bin interpolation), size-aware frame-resonance classification, noise floor |
-| `analysis/FilterRecommender.test.ts` | 108 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance (incl. disabled-notch dyn_notch_count=0 coverage), LPF2 recommendations (incl. D-term disable threshold boundary), conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q (3-4" midpoint 850), D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard, yaw-only resonance observation (F-YAW-RES), informational recs bypass deduplication |
+| `analysis/NoiseAnalyzer.test.ts` | 43 | Peak detection (plateau handling, 15 Hz min spacing, parabolic sub-bin interpolation), size-aware frame-resonance classification, noise floor, throttle-track reclassification (reclassifyPeaksWithThrottle: tracking → motor_harmonic, stationary → frame_resonance/electrical, insufficient bands/prominence keeps heuristic, classifiedBy + throttleTrack stamps) |
+| `analysis/FilterRecommender.test.ts` | 116 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance (incl. disabled-notch dyn_notch_count=0 coverage), LPF2 recommendations (incl. D-term disable threshold boundary), conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q (3-4" midpoint 850), D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard, yaw-only resonance observation (F-YAW-RES), informational recs bypass deduplication, LPF2 latency budget (high-confidence disable when over budget, enable gated by prospective delay, F-LPF2-BUDGET-* advisory, legacy no-delay behavior), structured evidence on resonance/noise-floor rules |
 | `analysis/DataQualityScorer.test.ts` | 39 | Filter/PID data quality scoring, tier mapping, warnings, confidence adjustment, TF data quality, low coherence warning |
 | `analysis/FilterAnalyzer.test.ts` | 20 | End-to-end pipeline, progress reporting, segment fallback warnings, RPM context propagation, data quality scoring, throttle spectrogram, group delay |
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 23 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking, contiguous-run gating (findContiguousRuns, min 512 samples, length-weighted power average) |
-| `analysis/GroupDelayEstimator.test.ts` | 28 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default) |
+| `analysis/GroupDelayEstimator.test.ts` | 31 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default), per-size latency budget (budget fields, over-budget flags, size-aware warning, default fallback) |
+| `analysis/RpmFilterRecommender.test.ts` | 18 | RPM filter tuning rules: min_hz from dynamic-idle floor (gap/waste directions, deadzone, clamping), min_hz from measured fundamental track (lower-only), harmonic-count increase from integer-ratio tracks (tolerance, amplitude threshold, max cap), fade-range and weights advisories, cross-axis dedup |
+| `shared/utils/bfVersionCapabilities.test.ts` | 11 | BF version parsing (semver + calendar 2025.12), capability gating (4.4 baseline, 4.5 tpa_low/RPM weights/anti-gravity cutoff, 4.6 d_max rename + chirp), d_min→d_max CLI name translation |
+| `shared/utils/filterResponse.test.ts` | 18 | Filter magnitude models: PT1/PT2/PT3 −3 dB at cutoff (BF cutoff corrections), Butterworth biquad rolloff, notch depth/transparency, type dispatch, BF dynamic-LPF throttle curve (linear/expo/clamping), chain combination (dB summing, disabled stages, throttle evaluation, display floor), gyro LPF1 cutoff-at-throttle |
 
 ### Step Response Analysis
 
@@ -372,19 +376,22 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 |------|-------|-------------|
 | `analysis/StepDetector.test.ts` | 16 | Derivative-based step detection, hold/cooldown |
 | `analysis/StepMetrics.test.ts` | 53 | Rise time, overshoot, settling, latency, ringing, FF contribution classification, trackingErrorRMS computation and aggregation, adaptive window, FF energy ratio |
-| `analysis/PIDRecommender.test.ts` | 266 | Flight PID anchoring, TF coherence gate (TF rules skipped below coherenceMean 0.5), convergence, safety bounds, FF context, FF-aware recommendations, flight style thresholds, proportional severity scaling, TF-based recommendations, damping ratio (micro max 1.0 vs standard 0.85), I-term, D-term effectiveness gating (informational P-DTE-BLOCK replacement), prop wash integration, Rule TF-4 DC gain I-term (style-aware threshold), quad-size-aware bounds (1" dMax 80/pTypical 72), severity-scaled sluggish P, P-too-high warning, P-too-low warning, informational flag, relaxed yaw ringing threshold (×1.5), FF boost step 3, D-min/TPA advisory, structured ruleId on all recommendations, iterm_relax_cutoff (severity-aware floor, aggressive typical 30), anti-gravity (700 g gate), thrust linear, RPM notch Q, D-max boost, dyn idle, TPA breakpoint/rate (small breakpoint 1250), D-term expo, pidsum limit (informational), FF rate limit, RC link FF profiles, bounds clamping validation, style-aware d_min gain |
+| `analysis/StepResponseStacker.test.ts` | 10 | Deconvolved (stacked) step response: Wiener deconvolution windows, low/high input-magnitude split (500 deg/s), input-energy-weighted coherence trust gate (≥2 windows, ≥0.5), quiet-window skip (max \|setpoint\| < 50 deg/s), metric extraction on 2nd-order demo plant, curve downsampling |
+| `analysis/PIDRecommender.test.ts` | 270 | Flight PID anchoring, TF coherence gate (TF rules skipped below coherenceMean 0.5), convergence, safety bounds, FF context, FF-aware recommendations, flight style thresholds, proportional severity scaling, TF-based recommendations, damping ratio (micro max 1.0 vs standard 0.85), I-term, D-term effectiveness gating (informational P-DTE-BLOCK replacement), prop wash integration, Rule TF-4 DC gain I-term (style-aware threshold), quad-size-aware bounds (1" dMax 80/pTypical 72), severity-scaled sluggish P, P-too-high warning, P-too-low warning, informational flag, relaxed yaw ringing threshold (×1.5), FF boost step 3, D-min/TPA advisory, structured ruleId on all recommendations, iterm_relax_cutoff (severity-aware floor, aggressive typical 30), anti-gravity (700 g gate), thrust linear, RPM notch Q, D-max boost, dyn idle, TPA breakpoint/rate (small breakpoint 1250), D-term expo, pidsum limit (informational), FF rate limit, RC link FF profiles, bounds clamping validation, style-aware d_min gain, P-TPA-LOW (BF 4.5+ low-throttle TPA on severe propwash, firmware-support gate) |
 | `analysis/PIDAnalyzer.test.ts` | 28 | End-to-end pipeline, progress reporting, FF context wiring, flight style propagation, data quality scoring, cross-axis, propwash integration |
 | `analysis/CrossAxisDetector.test.ts` | 20 | Cross-axis coupling detection, axis interaction analysis |
 | `analysis/PropWashDetector.test.ts` | 20 | Propwash detection, wash-out frequency analysis, clean-segment baseline (computeCleanRuns, whole-flight fallback) |
 | `analysis/DTermAnalyzer.test.ts` | 8 | D-term effectiveness, energy ratio computation, dCritical flag |
 | `analysis/WindDisturbanceDetector.test.ts` | 11 | Wind/disturbance detection, gyro variance during hover, calm/moderate/windy classification, per-axis independence, hover-only analysis, multiple segments |
-| `analysis/MechanicalHealthChecker.test.ts` | 21 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback) |
+| `analysis/MechanicalHealthChecker.test.ts` | 26 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback), per-motor spectral fault signatures (bent-prop order peak, bearing broadband, symmetric silence, short-data skip, experimental flags never degrade status) |
 | `analysis/DynamicLowpassRecommender.test.ts` | 31 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId, disable hysteresis (4 dB threshold, 4-6 dB gray zone leaves config untouched) |
 | `analysis/SliderMapper.test.ts` | 16 | Slider-aligned PID mapping, master multiplier, PD ratio, buildRecommendedPIDs, slider delta computation |
+| `analysis/FilterPlacementOptimizer.test.ts` | 9 | Filter placement optimizer (P3.3): notch-vs-lowpass tradeoff, infeasible low-frequency peak, LPF1-off requires RPM, delay delta vs current config, residual target, advisory emission (improvement threshold, near-optimal silence, infeasible silence) |
+| `analysis/SystemIdentifier.test.ts` | 9 | System identification (P3.2): known 2nd-order plant recovery from analytic closed loop (ωn/ζ/τ tolerances), coherence + bin-count gates, predicted step settles to unity, D-raise reduces predicted overshoot, P-raise speeds rise, what-if current+proposed pair, BF PID scale anchor |
 | `analysis/FeedforwardAnalyzer.test.ts` | 65 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic, FF-RC-SMOOTH advisory skipped for aggressive style, deriveMaxStickRate (max \|setpoint\|, floor 300, fallback 670) |
 | `analysis/BayesianPIDOptimizer.test.ts` | 31 | Gaussian Process surrogate, Expected Improvement, Latin Hypercube Sampling, bounds |
 | `analysis/TransferFunctionEstimator.test.ts` | 32 | Wiener deconvolution, frequency response estimation, Bode plot data, PID recommendations from transfer function, DC gain from 1-5 Hz band average (computeDcGainDb with bin-1/bin-0 fallbacks), magnitude-squared coherence γ²(f) + coherenceMean (1-30 Hz band, ≥2 Welch windows), gain/phase margin crossingFound flags |
-| `analysis/ThrottleTFAnalyzer.test.ts` | 8 | Per-band TF analysis, throttle binning, variance computation, TPA warning, band boundaries |
+| `analysis/ThrottleTFAnalyzer.test.ts` | 15 | Per-band TF analysis (roll + pitch), throttle binning, variance computation, TPA warning, band boundaries, TF-driven TPA rules (rate-up/down, breakpoint onset, flat trend, guard conditions, worst-axis selection, rate cap) |
 | `analysis/VerificationMatcher.test.ts` | 33 | Flight similarity matching (mechanical peaks, throttle overlap, step count ratio), filter/PID/flash verification scoring, PID magnitude CoV sub-score, BBL fixture calibration with real flight data |
 | `analysis/ConvergenceDetector.test.ts` | 18 | Convergence detection, diminishing returns, iteration tracking, previous session comparison, spectrum-scale-version guard (refuses cross-scale noise comparison), flash phase-margin sentinel guard (ignores 90° placeholder) |
 | `analysis/AnalysisPipeline.realdata.bbl.test.ts` | 10 | Real BBL fixture integration tests with actual flight data |

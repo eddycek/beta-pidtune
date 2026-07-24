@@ -8,6 +8,7 @@
  */
 
 import type { BlackboxFlightData } from '@shared/types/blackbox.types';
+import type { PIDRecommendation } from '@shared/types/analysis.types';
 import { binByThrottle, findContiguousRuns } from './ThrottleSpectrogramAnalyzer';
 import {
   estimateTransferFunction,
@@ -16,6 +17,18 @@ import {
   trimBode,
 } from './TransferFunctionEstimator';
 import type { TransferFunctionMetrics } from './TransferFunctionEstimator';
+import type { TPAContext } from './PIDRecommender';
+import {
+  TPA_TF_OVERSHOOT_DELTA_PP,
+  TPA_TF_OVERDAMPED_OVERSHOOT_PCT,
+  TPA_TF_RATE_STEP,
+  TPA_TF_RATE_MIN,
+  TPA_TF_RATE_MAX,
+  TPA_TF_MIN_BANDS,
+  TPA_TF_BREAKPOINT_MIN,
+  TPA_TF_BREAKPOINT_MAX,
+  TPA_TF_BREAKPOINT_DEADZONE,
+} from './constants';
 
 /** Default number of throttle bands for TF analysis */
 export const DEFAULT_TF_BANDS = 5;
@@ -44,18 +57,31 @@ export interface ThrottleTFBand {
   metrics: TransferFunctionMetrics | null;
 }
 
-export interface ThrottleTFResult {
-  /** Per-band results */
+/** Per-axis throttle-TF sub-result */
+export interface AxisThrottleTF {
   bands: ThrottleTFBand[];
-  /** Number of bands with enough data for TF estimation */
   bandsWithData: number;
-  /** Variance of key metrics across bands (std dev) */
   metricsVariance: {
     bandwidthHz: number;
     overshootPercent: number;
     phaseMarginDeg: number;
   };
-  /** TPA warning message if variance exceeds threshold */
+}
+
+export interface ThrottleTFResult {
+  /** Per-band results (roll axis — primary, kept top-level for compatibility) */
+  bands: ThrottleTFBand[];
+  /** Number of bands with enough data for TF estimation */
+  bandsWithData: number;
+  /** Variance of key metrics across bands (std dev, roll axis) */
+  metricsVariance: {
+    bandwidthHz: number;
+    overshootPercent: number;
+    phaseMarginDeg: number;
+  };
+  /** Pitch-axis per-band analysis (P2.8) — absent when pitch lacks data */
+  pitch?: AxisThrottleTF;
+  /** TPA warning message if variance exceeds threshold (worst axis) */
   tpaWarning?: string;
 }
 
@@ -117,10 +143,40 @@ function estimatePerBand(
 }
 
 /**
+ * Analyze one axis's transfer function across throttle bands.
+ * Returns null when fewer than 2 bands have enough data.
+ */
+function analyzeAxisThrottleTF(
+  setpoint: Float64Array,
+  gyro: Float64Array,
+  throttle: Float64Array,
+  sampleRateHz: number,
+  numBands: number
+): AxisThrottleTF | null {
+  const bands = estimatePerBand(setpoint, gyro, throttle, sampleRateHz, numBands);
+  const bandsWithData = bands.filter((b) => b.metrics !== null).length;
+  if (bandsWithData < 2) return null;
+
+  const metricsWithData = bands
+    .filter((b): b is ThrottleTFBand & { metrics: TransferFunctionMetrics } => b.metrics !== null)
+    .map((b) => b.metrics);
+
+  const metricsVariance = {
+    bandwidthHz: Math.round(stdDev(metricsWithData.map((m) => m.bandwidthHz)) * 100) / 100,
+    overshootPercent:
+      Math.round(stdDev(metricsWithData.map((m) => m.overshootPercent)) * 100) / 100,
+    phaseMarginDeg: Math.round(stdDev(metricsWithData.map((m) => m.phaseMarginDeg)) * 100) / 100,
+  };
+
+  return { bands, bandsWithData, metricsVariance };
+}
+
+/**
  * Analyze transfer function across throttle bands.
  *
- * Uses roll axis as the primary indicator (most sensitive to TPA effects).
- * Returns per-band metrics, cross-band variance, and optional TPA warning.
+ * Roll is the primary axis (kept top-level for compatibility); pitch is
+ * analyzed as well (P2.8) and attached when it has enough data. The TPA
+ * warning reflects the worst axis.
  *
  * @param flightData - Parsed blackbox flight data
  * @param sampleRateHz - Sample rate in Hz
@@ -133,48 +189,54 @@ export function analyzeThrottleTF(
   numBands: number = DEFAULT_TF_BANDS
 ): ThrottleTFResult | null {
   // setpoint: [roll, pitch, yaw, throttle], gyro: [roll, pitch, yaw]
-  // Use roll axis as primary (most sensitive to TPA)
-  const bands = estimatePerBand(
+  const throttle = flightData.setpoint[3].values;
+  const roll = analyzeAxisThrottleTF(
     flightData.setpoint[0].values,
     flightData.gyro[0].values,
-    flightData.setpoint[3].values,
+    throttle,
+    sampleRateHz,
+    numBands
+  );
+  if (!roll) return null;
+
+  const pitch = analyzeAxisThrottleTF(
+    flightData.setpoint[1].values,
+    flightData.gyro[1].values,
+    throttle,
     sampleRateHz,
     numBands
   );
 
-  const bandsWithData = bands.filter((b) => b.metrics !== null).length;
-
-  if (bandsWithData < 2) {
-    return null; // Need at least 2 bands to compute variance
-  }
-
-  // Compute variance across bands with data
-  const metricsWithData = bands
-    .filter((b): b is ThrottleTFBand & { metrics: TransferFunctionMetrics } => b.metrics !== null)
-    .map((b) => b.metrics);
-
-  const metricsVariance = {
-    bandwidthHz: Math.round(stdDev(metricsWithData.map((m) => m.bandwidthHz)) * 100) / 100,
-    overshootPercent:
-      Math.round(stdDev(metricsWithData.map((m) => m.overshootPercent)) * 100) / 100,
-    phaseMarginDeg: Math.round(stdDev(metricsWithData.map((m) => m.phaseMarginDeg)) * 100) / 100,
+  // Warning from the worst axis
+  const worstVariance = {
+    bandwidthHz: Math.max(
+      roll.metricsVariance.bandwidthHz,
+      pitch?.metricsVariance.bandwidthHz ?? 0
+    ),
+    overshootPercent: Math.max(
+      roll.metricsVariance.overshootPercent,
+      pitch?.metricsVariance.overshootPercent ?? 0
+    ),
+    phaseMarginDeg: Math.max(
+      roll.metricsVariance.phaseMarginDeg,
+      pitch?.metricsVariance.phaseMarginDeg ?? 0
+    ),
   };
 
-  // Generate TPA warning if variance is high
   const warnings: string[] = [];
-  if (metricsVariance.bandwidthHz > TPA_VARIANCE_THRESHOLD.bandwidthHz) {
+  if (worstVariance.bandwidthHz > TPA_VARIANCE_THRESHOLD.bandwidthHz) {
     warnings.push(
-      `Bandwidth varies by ±${metricsVariance.bandwidthHz.toFixed(0)} Hz across throttle range`
+      `Bandwidth varies by ±${worstVariance.bandwidthHz.toFixed(0)} Hz across throttle range`
     );
   }
-  if (metricsVariance.overshootPercent > TPA_VARIANCE_THRESHOLD.overshootPercent) {
+  if (worstVariance.overshootPercent > TPA_VARIANCE_THRESHOLD.overshootPercent) {
     warnings.push(
-      `Overshoot varies by ±${metricsVariance.overshootPercent.toFixed(0)}% across throttle range`
+      `Overshoot varies by ±${worstVariance.overshootPercent.toFixed(0)}% across throttle range`
     );
   }
-  if (metricsVariance.phaseMarginDeg > TPA_VARIANCE_THRESHOLD.phaseMarginDeg) {
+  if (worstVariance.phaseMarginDeg > TPA_VARIANCE_THRESHOLD.phaseMarginDeg) {
     warnings.push(
-      `Phase margin varies by ±${metricsVariance.phaseMarginDeg.toFixed(0)}° across throttle range`
+      `Phase margin varies by ±${worstVariance.phaseMarginDeg.toFixed(0)}° across throttle range`
     );
   }
 
@@ -184,9 +246,165 @@ export function analyzeThrottleTF(
       : undefined;
 
   return {
-    bands,
-    bandsWithData,
-    metricsVariance,
+    bands: roll.bands,
+    bandsWithData: roll.bandsWithData,
+    metricsVariance: roll.metricsVariance,
+    ...(pitch ? { pitch } : {}),
     tpaWarning,
   };
+}
+
+/**
+ * Emit measured TPA recommendations from per-band TF trends (P2.8).
+ *
+ * TPA attenuates PID gains at high throttle. If the measured closed-loop
+ * overshoot GROWS from the low- to the high-throttle bands, the attenuation
+ * is too weak (raise tpa_rate; move the breakpoint down to where the
+ * oscillation starts). If high-throttle bands are overdamped while low bands
+ * still overshoot, the attenuation is too strong (lower tpa_rate).
+ *
+ * Trends are taken from the worst of roll/pitch. Requires tpa_rate from the
+ * BBL header and ≥3 bands with TF data on the driving axis.
+ */
+export function recommendTPAFromThrottleTF(
+  result: ThrottleTFResult,
+  tpaContext: TPAContext | undefined
+): PIDRecommendation[] {
+  const recs: PIDRecommendation[] = [];
+  if (!tpaContext || tpaContext.rate === undefined) return recs;
+
+  // Pick the axis with the larger low→high overshoot change (worst case)
+  const axes: { label: string; bands: ThrottleTFBand[] }[] = [
+    { label: 'roll', bands: result.bands },
+    ...(result.pitch ? [{ label: 'pitch', bands: result.pitch.bands }] : []),
+  ];
+
+  let driving: { label: string; delta: number; low: number; high: number; onset?: number } | null =
+    null;
+
+  for (const axis of axes) {
+    const withData = axis.bands.filter((b) => b.metrics !== null);
+    if (withData.length < TPA_TF_MIN_BANDS) continue;
+
+    // Split into lower and upper halves by throttle
+    const midIdx = Math.floor(withData.length / 2);
+    const lowBands = withData.slice(0, midIdx);
+    const highBands = withData.slice(midIdx);
+    const mean = (bands: ThrottleTFBand[]) =>
+      bands.reduce((s, b) => s + b.metrics!.overshootPercent, 0) / bands.length;
+    const low = mean(lowBands);
+    const high = mean(highBands);
+    const delta = high - low;
+
+    // Throttle where overshoot first exceeds the low mean by the trigger delta
+    const onsetBand = withData.find(
+      (b) => b.metrics!.overshootPercent > low + TPA_TF_OVERSHOOT_DELTA_PP
+    );
+
+    if (driving === null || Math.abs(delta) > Math.abs(driving.delta)) {
+      driving = { label: axis.label, delta, low, high, onset: onsetBand?.throttleMin };
+    }
+  }
+
+  if (!driving) return recs;
+  const rate = tpaContext.rate;
+
+  if (driving.delta >= TPA_TF_OVERSHOOT_DELTA_PP) {
+    // Oscillation grows with throttle → TPA too weak
+    const target = Math.min(rate + TPA_TF_RATE_STEP, TPA_TF_RATE_MAX);
+    if (target > rate) {
+      recs.push({
+        setting: 'tpa_rate',
+        currentValue: rate,
+        recommendedValue: target,
+        reason:
+          `Measured ${driving.label} overshoot grows from ${driving.low.toFixed(0)}% at low throttle ` +
+          `to ${driving.high.toFixed(0)}% at high throttle — the PID gains are too hot up top and TPA ` +
+          `is not attenuating enough. Raising tpa_rate from ${rate} to ${target} damps the ` +
+          'high-throttle oscillation without touching low-throttle response.',
+        impact: 'stability',
+        confidence: 'medium',
+        ruleId: 'TPA-TF-RATE-UP',
+        evidence: {
+          measurements: [
+            {
+              label: `Low-throttle ${driving.label} overshoot`,
+              value: `${driving.low.toFixed(0)}%`,
+            },
+            {
+              label: `High-throttle ${driving.label} overshoot`,
+              value: `${driving.high.toFixed(0)}%`,
+            },
+          ],
+          trigger: `Overshoot grows ≥ ${TPA_TF_OVERSHOOT_DELTA_PP} pp from low- to high-throttle TF bands`,
+        },
+      });
+    }
+
+    // Breakpoint: move to where the oscillation measurably starts
+    if (tpaContext.breakpoint !== undefined && driving.onset !== undefined) {
+      const onsetUs = Math.round((1000 + driving.onset * 1000) / 10) * 10;
+      const target2 = Math.min(Math.max(onsetUs, TPA_TF_BREAKPOINT_MIN), TPA_TF_BREAKPOINT_MAX);
+      if (tpaContext.breakpoint - target2 > TPA_TF_BREAKPOINT_DEADZONE) {
+        recs.push({
+          setting: 'tpa_breakpoint',
+          currentValue: tpaContext.breakpoint,
+          recommendedValue: target2,
+          reason:
+            `The measured high-throttle oscillation starts around ${Math.round((driving.onset ?? 0) * 100)}% ` +
+            `throttle, but TPA only begins attenuating at breakpoint ${tpaContext.breakpoint}. ` +
+            `Lowering the breakpoint to ${target2} starts the attenuation where the oscillation actually begins.`,
+          impact: 'stability',
+          confidence: 'medium',
+          ruleId: 'TPA-TF-BREAKPOINT',
+          evidence: {
+            measurements: [
+              {
+                label: 'Measured oscillation onset',
+                value: `~${Math.round((driving.onset ?? 0) * 100)}% throttle`,
+              },
+              { label: 'Current breakpoint', value: `${tpaContext.breakpoint}` },
+            ],
+            trigger: 'Overshoot exceeds the low-band mean before TPA starts attenuating',
+          },
+        });
+      }
+    }
+  } else if (
+    driving.delta <= -TPA_TF_OVERSHOOT_DELTA_PP &&
+    driving.high < TPA_TF_OVERDAMPED_OVERSHOOT_PCT
+  ) {
+    // High-throttle response overdamped while low throttle still overshoots → TPA too strong
+    const target = Math.max(rate - TPA_TF_RATE_STEP, TPA_TF_RATE_MIN);
+    if (target < rate) {
+      recs.push({
+        setting: 'tpa_rate',
+        currentValue: rate,
+        recommendedValue: target,
+        reason:
+          `Measured ${driving.label} response is overdamped at high throttle ` +
+          `(${driving.high.toFixed(0)}% overshoot vs ${driving.low.toFixed(0)}% at low throttle) — ` +
+          `TPA is attenuating more than needed, costing punch-out authority. ` +
+          `Lowering tpa_rate from ${rate} to ${target} restores high-throttle response.`,
+        impact: 'response',
+        confidence: 'low',
+        ruleId: 'TPA-TF-RATE-DOWN',
+        evidence: {
+          measurements: [
+            {
+              label: `Low-throttle ${driving.label} overshoot`,
+              value: `${driving.low.toFixed(0)}%`,
+            },
+            {
+              label: `High-throttle ${driving.label} overshoot`,
+              value: `${driving.high.toFixed(0)}%`,
+            },
+          ],
+          trigger: `High-throttle bands overdamped (< ${TPA_TF_OVERDAMPED_OVERSHOOT_PCT}% overshoot) while low bands overshoot`,
+        },
+      });
+    }
+  }
+
+  return recs;
 }

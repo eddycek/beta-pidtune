@@ -114,6 +114,10 @@ export interface PIDMetricsSummary {
   dataQuality?: { overall: number; tier: string };
   /** Best step response trace per axis (downsampled for history chart) */
   stepResponse?: CompactStepResponse;
+  /** Which method produced the headline metrics ('deconvolved' when any axis
+   * used the stacked Wiener response). Deconvolved and per-step overshoot/
+   * settling live on different scales — cross-source comparisons are invalid. */
+  metricsSource?: 'per_step' | 'deconvolved';
 }
 
 /** Per-axis transfer function metrics summary for history storage */

@@ -23,6 +23,7 @@ import { logger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { validateCLIResponse } from '../../msp/cliUtils';
 import { verifyAppliedConfig } from '../../utils/verifyAppliedConfig';
+import { getBFCapabilities, translateSettingForVersion } from '@shared/utils/bfVersionCapabilities';
 import { sendAutoReport } from '../../diagnostic/DiagnosticReportService';
 import { MockMSPClient } from '../../demo/MockMSPClient';
 import {
@@ -164,6 +165,9 @@ const BF_SETTING_RANGES: Record<string, { min: number; max: number }> = {
   dyn_notch_count: { min: 0, max: 5 },
   dyn_notch_q: { min: 1, max: 1000 },
   rpm_filter_q: { min: 1, max: 1000 },
+  rpm_filter_min_hz: { min: 30, max: 200 },
+  rpm_filter_harmonics: { min: 0, max: 3 },
+  rpm_filter_fade_range_hz: { min: 0, max: 1000 },
   feedforward_boost: { min: 0, max: 50 },
   feedforward_smooth_factor: { min: 0, max: 75 },
   feedforward_jitter_factor: { min: 0, max: 20 },
@@ -302,6 +306,12 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
         validateRecommendationBounds(ffRecs, 'Feedforward');
         validateRecommendationBounds(pidRecs, 'PID');
 
+        // Version-capabilities layer (P2.5): translate renamed CLI settings for
+        // the connected firmware (e.g. d_min_gain → d_max_gain on BF 4.6+).
+        // AppliedChange records keep the canonical (pre-rename) name — MSP
+        // read-back verification is layout-based and unaffected by CLI names.
+        const bfCapabilities = getBFCapabilities(deps.fcStateCache?.getState().info?.version);
+
         // Order matters: MSP commands first (PIDs), then CLI operations
         // (filters, save). The apply flow enters CLI explicitly for filter/FF
         // commands — exportCLIDiff() detects wasInCLI=true and skips exit.
@@ -363,7 +373,7 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
           try {
             for (const rec of actionableFilterRecs) {
               const value = Math.round(rec.recommendedValue);
-              const cmd = `set ${rec.setting} = ${value}`;
+              const cmd = `set ${translateSettingForVersion(rec.setting, bfCapabilities)} = ${value}`;
               sendProgress({
                 stage: 'filter',
                 message: `Setting ${rec.setting} = ${value}...`,
@@ -420,7 +430,7 @@ export function registerTuningHandlers(deps: HandlerDependencies): void {
           try {
             for (const rec of ffRecs) {
               const value = Math.round(rec.recommendedValue);
-              const cmd = `set ${rec.setting} = ${value}`;
+              const cmd = `set ${translateSettingForVersion(rec.setting, bfCapabilities)} = ${value}`;
               sendProgress({
                 stage: 'feedforward',
                 message: `Setting ${rec.setting} = ${value}...`,

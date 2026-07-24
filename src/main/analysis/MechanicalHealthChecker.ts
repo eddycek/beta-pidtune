@@ -16,6 +16,7 @@ import type {
   MechanicalHealthResult,
 } from '@shared/types/analysis.types';
 import { THROTTLE_MIN_FLIGHT, THROTTLE_MAX_HOVER, NOISE_LEVEL_BY_SIZE } from './constants';
+import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
 import type { DroneSize } from '@shared/types/profile.types';
 
 export type { HealthSeverity, MechanicalHealthIssue, MechanicalHealthResult };
@@ -49,6 +50,26 @@ export const MOTOR_VARIANCE_RATIO_THRESHOLD = 3.0;
 
 /** Minimum hover duration for motor analysis (seconds) */
 const MIN_HOVER_DURATION_S = 1.0;
+
+// ---- Per-motor spectral fault signatures (P3.4, experimental) ----
+
+/** Rotation-order band searched for a bent-prop / imbalance signature (Hz).
+ * The PID loop counteracts a 1×/rev vibration, which shows up as a
+ * narrowband peak in that motor's COMMAND signal at the rotation frequency. */
+export const MOTOR_ORDER_MIN_HZ = 60;
+export const MOTOR_ORDER_MAX_HZ = 350;
+/** One motor's order peak must exceed the other motors' level at the same
+ * frequency by this much to flag a prop signature */
+export const MOTOR_PEAK_DELTA_DB = 8;
+/** Broadband band checked for a bearing-wear signature (Hz) */
+export const MOTOR_BROADBAND_MIN_HZ = 200;
+export const MOTOR_BROADBAND_MAX_HZ = 500;
+/** One motor's broadband median must sit this far above the others' median */
+export const MOTOR_BROADBAND_DELTA_DB = 6;
+/** Minimum samples for per-motor spectral analysis */
+const MOTOR_SPECTRUM_MIN_SAMPLES = 4096;
+/** FFT window for per-motor spectra */
+const MOTOR_SPECTRUM_WINDOW = 1024;
 
 // ---- Implementation ----
 
@@ -188,6 +209,109 @@ function checkMotorImbalance(flightData: BlackboxFlightData): MechanicalHealthIs
   return issues;
 }
 
+/** Median of an array (non-mutating) */
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
+
+/**
+ * Per-motor order/spectral analysis (P3.4, experimental).
+ *
+ * Computes each motor command signal's power spectrum and compares the four
+ * signatures against each other (relative comparison — the absolute motor
+ * scale cancels):
+ * - A narrowband peak on ONE motor that the others lack at the same frequency
+ *   (rotation-order band) → bent prop / prop imbalance signature.
+ * - One motor's broadband level sitting well above the others in the bearing
+ *   band → bearing-wear signature.
+ *
+ * Both flags are informational and marked experimental — thresholds are being
+ * calibrated from telemetry before they can gate anything.
+ */
+export function checkMotorSpectralSignatures(
+  flightData: BlackboxFlightData
+): MechanicalHealthIssue[] {
+  const issues: MechanicalHealthIssue[] = [];
+  const { motor, sampleRateHz } = flightData;
+  if (motor.length < 4) return issues;
+  if (motor.some((m) => m.values.length < MOTOR_SPECTRUM_MIN_SAMPLES)) return issues;
+
+  // Per-motor spectra over the shared rotation-order + bearing range
+  const spectra = motor.map((m) => {
+    const full = computePowerSpectrum(m.values, sampleRateHz, MOTOR_SPECTRUM_WINDOW);
+    return trimSpectrum(full, MOTOR_ORDER_MIN_HZ, MOTOR_BROADBAND_MAX_HZ);
+  });
+  const numBins = Math.min(...spectra.map((s) => s.frequencies.length));
+  if (numBins < 8) return issues;
+
+  // ── Bent-prop / imbalance: strongest per-motor order peak vs the others ──
+  let worstProp: { motorIdx: number; freq: number; delta: number } | null = null;
+  for (let m = 0; m < 4; m++) {
+    for (let i = 0; i < numBins; i++) {
+      const f = spectra[m].frequencies[i];
+      if (f < MOTOR_ORDER_MIN_HZ || f > MOTOR_ORDER_MAX_HZ) continue;
+      const own = spectra[m].magnitudes[i];
+      const others = spectra
+        .filter((_, idx) => idx !== m)
+        .map((s) => s.magnitudes[Math.min(i, s.frequencies.length - 1)]);
+      const delta = own - median(others);
+      if (delta >= MOTOR_PEAK_DELTA_DB && (!worstProp || delta > worstProp.delta)) {
+        worstProp = { motorIdx: m, freq: f, delta };
+      }
+    }
+  }
+  if (worstProp) {
+    issues.push({
+      type: 'motor_prop_signature',
+      severity: 'info',
+      message:
+        `(Experimental) Motor ${worstProp.motorIdx + 1} shows a vibration signature at ` +
+        `${Math.round(worstProp.freq)} Hz that is ${worstProp.delta.toFixed(0)} dB stronger than ` +
+        'the other motors at the same frequency — consistent with a bent or unbalanced prop on ' +
+        'that corner. Inspect the prop and motor bell.',
+      measuredValue: Math.round(worstProp.delta * 10) / 10,
+      threshold: MOTOR_PEAK_DELTA_DB,
+      experimental: true,
+    });
+  }
+
+  // ── Bearing wear: broadband median in the bearing band vs the others ──
+  const broadbandMedians = spectra.map((s) => {
+    const vals: number[] = [];
+    for (let i = 0; i < s.frequencies.length; i++) {
+      const f = s.frequencies[i];
+      if (f >= MOTOR_BROADBAND_MIN_HZ && f <= MOTOR_BROADBAND_MAX_HZ) {
+        vals.push(s.magnitudes[i]);
+      }
+    }
+    return vals.length > 0 ? median(vals) : -Infinity;
+  });
+  if (broadbandMedians.every((v) => Number.isFinite(v))) {
+    for (let m = 0; m < 4; m++) {
+      const others = broadbandMedians.filter((_, idx) => idx !== m);
+      const delta = broadbandMedians[m] - median(others);
+      if (delta >= MOTOR_BROADBAND_DELTA_DB) {
+        issues.push({
+          type: 'motor_bearing_signature',
+          severity: 'info',
+          message:
+            `(Experimental) Motor ${m + 1} shows ${delta.toFixed(0)} dB more broadband noise in the ` +
+            `${MOTOR_BROADBAND_MIN_HZ}-${MOTOR_BROADBAND_MAX_HZ} Hz band than the other motors — ` +
+            'consistent with bearing wear. Spin the motor by hand and listen for grinding.',
+          measuredValue: Math.round(delta * 10) / 10,
+          threshold: MOTOR_BROADBAND_DELTA_DB,
+          experimental: true,
+        });
+        break; // one bearing flag is enough per flight
+      }
+    }
+  }
+
+  return issues;
+}
+
 /**
  * Generate overall summary from issues.
  */
@@ -232,7 +356,10 @@ export function checkMechanicalHealth(
   // Check 3: Motor imbalance
   issues.push(...checkMotorImbalance(flightData));
 
-  // Determine overall status
+  // Check 4: Per-motor spectral fault signatures (P3.4, experimental, info-only)
+  issues.push(...checkMotorSpectralSignatures(flightData));
+
+  // Determine overall status (experimental info flags never change it)
   let status: HealthSeverity = 'ok';
   if (issues.some((i) => i.severity === 'critical')) {
     status = 'critical';

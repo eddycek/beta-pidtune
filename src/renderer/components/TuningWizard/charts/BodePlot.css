@@ -37,3 +37,9 @@
 .bode-plot .recharts-cartesian-grid-vertical line {
   stroke: #2a2a2a;
 }
+
+.bode-plot-coherence-note {
+  margin: 6px 4px 0;
+  font-size: 11px;
+  color: var(--text-secondary, #888);
+}

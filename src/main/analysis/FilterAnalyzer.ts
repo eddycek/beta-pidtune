@@ -19,7 +19,7 @@ import type {
 import { DEFAULT_FILTER_SETTINGS } from '@shared/types/analysis.types';
 import { findSteadySegments, findThrottleSweepSegments } from './SegmentSelector';
 import { computePowerSpectrum, trimSpectrum } from './FFTCompute';
-import { analyzeAxisNoise, buildNoiseProfile } from './NoiseAnalyzer';
+import { analyzeAxisNoise, buildNoiseProfile, reclassifyPeaksWithThrottle } from './NoiseAnalyzer';
 import {
   recommend,
   generateSummary,
@@ -34,6 +34,7 @@ import { estimateGroupDelay } from './GroupDelayEstimator';
 import { analyzeWindDisturbance } from './WindDisturbanceDetector';
 import { checkMechanicalHealth } from './MechanicalHealthChecker';
 import { analyzeDynamicLowpass, recommendDynamicLowpass } from './DynamicLowpassRecommender';
+import { optimizeFilterPlacement, recommendFilterPlacement } from './FilterPlacementOptimizer';
 import { FFT_WINDOW_SIZE, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ } from './constants';
 
 /** Maximum number of segments to use (more = slower but more accurate) */
@@ -151,9 +152,28 @@ export async function analyze(
     throttleSpectrogram = computeThrottleSpectrogram(flightData);
   }
 
+  // Step 3c: Throttle-track reclassification — a peak whose frequency rises
+  // with throttle is motor noise; a stationary peak is frame/electrical.
+  // Definitive where the whole-flight equal-spacing heuristic can only guess.
+  if (throttleSpectrogram && throttleSpectrogram.bandsWithData >= 3) {
+    const axisProfiles = [noiseProfile.roll, noiseProfile.pitch, noiseProfile.yaw] as const;
+    for (let axis = 0; axis < 3; axis++) {
+      axisProfiles[axis].peaks = reclassifyPeaksWithThrottle(
+        axisProfiles[axis].peaks,
+        throttleSpectrogram.bands,
+        axis as 0 | 1 | 2,
+        options?.droneSize
+      );
+    }
+  }
+
   await yieldToEventLoop();
 
-  // Step 4: Generate recommendations
+  // Step 4: Estimate group delay first — the LPF2 rules weigh it against the
+  // per-size latency budget
+  const groupDelay = estimateGroupDelay(currentSettings, undefined, options?.droneSize);
+
+  // Step 5: Generate recommendations
   onProgress?.({ step: 'recommending', percent: 85 });
   const rpmActive = isRpmFilterActive(currentSettings);
 
@@ -163,16 +183,14 @@ export async function analyze(
     noiseProfile,
     currentSettings,
     options?.droneSize,
-    confidenceContext
+    confidenceContext,
+    groupDelay
   );
   const recommendations = adjustFilterConfidenceByQuality(
     rawRecommendations,
     qualityResult.score.tier
   );
   const summary = generateSummary(noiseProfile, recommendations, rpmActive);
-
-  // Step 5: Estimate group delay
-  const groupDelay = estimateGroupDelay(currentSettings);
 
   // Step 6: Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);
@@ -199,10 +217,22 @@ export async function analyze(
   // Step 9: Profile-aware advisory recommendations
   appendProfileAdvisories(recommendations, currentSettings, options);
 
+  // Step 10: Filter placement optimizer (advisory) — the latency-optimal
+  // discrete config that still covers every measured peak
+  const filterPlacement = optimizeFilterPlacement(
+    noiseProfile,
+    currentSettings,
+    rpmActive,
+    options?.droneSize
+  );
+  const placementRec = recommendFilterPlacement(filterPlacement, options?.droneSize);
+  if (placementRec) recommendations.push(placementRec);
+
   onProgress?.({ step: 'recommending', percent: 100 });
 
   return {
     noise: noiseProfile,
+    ...(filterPlacement ? { filterPlacement } : {}),
     recommendations,
     summary,
     analysisTimeMs: Math.round(performance.now() - startTime),
@@ -216,6 +246,7 @@ export async function analyze(
     windDisturbance,
     mechanicalHealth,
     dynamicLowpass,
+    filterSettings: currentSettings,
   };
 }
 
@@ -258,17 +289,35 @@ async function analyzeEntireFlight(
     throttleSpectrogram = computeThrottleSpectrogram(flightData);
   }
 
+  // Throttle-track reclassification (see main path)
+  if (throttleSpectrogram && throttleSpectrogram.bandsWithData >= 3) {
+    const axisProfiles = [noiseProfile.roll, noiseProfile.pitch, noiseProfile.yaw] as const;
+    for (let axis = 0; axis < 3; axis++) {
+      axisProfiles[axis].peaks = reclassifyPeaksWithThrottle(
+        axisProfiles[axis].peaks,
+        throttleSpectrogram.bands,
+        axis as 0 | 1 | 2,
+        options?.droneSize
+      );
+    }
+  }
+
   onProgress?.({ step: 'recommending', percent: 85 });
   const rpmActive = isRpmFilterActive(currentSettings);
-  const rawRecommendations = recommend(noiseProfile, currentSettings, options?.droneSize);
+  const groupDelay = estimateGroupDelay(currentSettings, undefined, options?.droneSize);
+  const rawRecommendations = recommend(
+    noiseProfile,
+    currentSettings,
+    options?.droneSize,
+    undefined,
+    groupDelay
+  );
   const recommendations = dataQuality
     ? adjustFilterConfidenceByQuality(rawRecommendations, dataQuality.tier)
     : rawRecommendations;
   const summary = generateSummary(noiseProfile, recommendations, rpmActive);
 
   onProgress?.({ step: 'recommending', percent: 100 });
-
-  const groupDelay = estimateGroupDelay(currentSettings);
 
   // Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);
@@ -308,6 +357,7 @@ async function analyzeEntireFlight(
     windDisturbance,
     mechanicalHealth,
     dynamicLowpass,
+    filterSettings: currentSettings,
   };
 }
 

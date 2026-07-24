@@ -498,12 +498,26 @@ function buildDemoSession(config: DemoSessionConfig): Buffer {
 
   // ── Frame generation ────────────────────────────────────────────
   const durationSec = frameCount / sampleRateHz;
+  // Motor harmonic phase accumulator — the instantaneous frequency tracks
+  // throttle (motor noise scales with RPM), so the phase must be integrated
+  // to stay continuous. Real motor noise draws the diagonal-line signature
+  // in throttle spectrograms; a fixed-frequency sinusoid would (correctly!)
+  // be classified as stationary/frame noise by the throttle-track classifier.
+  let motorPhase = 0;
+  const dtSec = (looptime * iInterval) / 1_000_000;
   for (let f = 0; f < frameCount; f++) {
     const frame: number[] = [0x49]; // I-frame marker
 
     const loopIter = f * iInterval;
     const time = loopIter * looptime; // µs
     const timeSec = time / 1_000_000;
+
+    // Instantaneous motor frequency: motorHarmonicHz at ~60% throttle,
+    // scaling proportionally with normalized throttle (RPM-like)
+    const throttleRaw = computeThrottle(timeSec, durationSec);
+    const normThrottle = Math.max(0, Math.min(1, (throttleRaw - 1000) / 1000));
+    const instMotorFreq = motorHarmonicHz * (0.4 + normThrottle);
+    motorPhase += 2 * Math.PI * instMotorFreq * dtSec;
 
     frame.push(...encodeUVB(loopIter));
     frame.push(...encodeUVB(time));
@@ -518,14 +532,11 @@ function buildDemoSession(config: DemoSessionConfig): Buffer {
       const axisNoiseMult = axis === 0 ? axisAsymmetry : 1.0;
       value += gaussianNoise(noiseAmplitude * axisNoiseMult);
 
-      // Motor harmonic (strong peak in spectrum)
-      value += motorHarmonicAmplitude * Math.sin(2 * Math.PI * motorHarmonicHz * timeSec + axis);
+      // Motor harmonic (strong peak that tracks throttle/RPM)
+      value += motorHarmonicAmplitude * Math.sin(motorPhase + axis);
 
       // Second motor harmonic (2x frequency, lower amplitude)
-      value +=
-        motorHarmonicAmplitude *
-        0.4 *
-        Math.sin(2 * Math.PI * motorHarmonicHz * 2 * timeSec + axis * 0.5);
+      value += motorHarmonicAmplitude * 0.4 * Math.sin(2 * motorPhase + axis * 0.5);
 
       // Electrical noise (high frequency)
       value +=

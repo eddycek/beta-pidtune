@@ -163,6 +163,36 @@ export const MOTOR_HARMONIC_TOLERANCE_MIN_HZ = 5;
 /** Minimum number of equally-spaced peaks to classify as motor harmonics */
 export const MOTOR_HARMONIC_MIN_PEAKS = 3;
 
+// ---- Throttle-Track Peak Classification ----
+// Motor noise frequency scales with RPM (≈ throttle); frame resonance and
+// electrical noise stay put. Regressing a peak's per-throttle-band frequency
+// against throttle is definitive where the whole-flight equal-spacing
+// heuristic can only guess.
+
+/** Minimum throttle bands showing the peak before track classification applies */
+export const HARMONIC_TRACK_MIN_BANDS = 3;
+
+/** Pearson correlation (throttle vs peak frequency) at/above which the peak
+ * is classified as a motor harmonic */
+export const HARMONIC_TRACK_MIN_CORRELATION = 0.6;
+
+/** Minimum relative frequency range across bands ((max-min)/mean) for a
+ * motor-harmonic classification — the track must actually move */
+export const HARMONIC_TRACK_MIN_REL_RANGE = 0.15;
+
+/** Maximum relative frequency range for a "stationary" classification
+ * (frame resonance / electrical). Between this and
+ * HARMONIC_TRACK_MIN_REL_RANGE the track is ambiguous → keep the heuristic. */
+export const STATIONARY_TRACK_MAX_REL_RANGE = 0.08;
+
+/** Per-band search window around the averaged-spectrum peak, as a fraction
+ * of the peak frequency (harmonics move proportionally with RPM) */
+export const TRACK_SEARCH_REL_WINDOW = 0.3;
+
+/** Minimum prominence (dB above the band's floor) for a band to count as
+ * showing the peak */
+export const TRACK_BAND_MIN_PROMINENCE_DB = 6;
+
 // ---- Filter Recommendation Safety Bounds ----
 
 /** Absolute minimum gyro lowpass 1 cutoff in Hz (BF guide: 50 very noisy, 80 slightly noisy) */
@@ -342,6 +372,37 @@ export const STEP_COOLDOWN_MS = 100;
 
 /** Step must hold for at least this long (ms) */
 export const STEP_MIN_HOLD_MS = 50;
+
+// ---- Deconvolved (Stacked) Step Response ----
+
+/** Input-magnitude split threshold for the deconvolved step response (deg/s).
+ * Betaflight's feedforward / D-setpoint transition behaves differently for
+ * small vs large inputs — PIDtoolbox convention splits at 500 deg/s. */
+export const INPUT_SPLIT_THRESHOLD_DEG_S = 500;
+
+/** Minimum Welch windows per split group before its deconvolved metrics are
+ * trusted (a single window has trivially-1 coherence and high variance). */
+export const DECONV_MIN_WINDOWS = 2;
+
+/** Relative disagreement between deconvolved and per-step overshoot above
+ * which a cross-check warning is emitted (0.5 = 50%). */
+export const DECONV_DISAGREEMENT_RATIO = 0.5;
+
+/** Absolute overshoot floor (percentage points) below which the relative
+ * disagreement check is skipped — 2% vs 4% is a 100% relative difference
+ * but both mean "no overshoot problem". */
+export const DECONV_DISAGREEMENT_MIN_PP = 5;
+
+/** Scale applied to overshoot and settling THRESHOLDS when the axis metrics
+ * come from the deconvolved (stacked) step response. The Wiener estimate is
+ * inherently smoother than direct per-step measurement (Hanning windowing +
+ * regularization + impulse smoothing) — the same physical response reads
+ * roughly half the overshoot/settling. Calibrated on the demo generator's
+ * known second-order plant across tuning cycles (per-step → deconvolved
+ * overshoot: 25.8→13.5, 6.3→1.6, 3.0→1.2, 2.1→1.1; settling 500→205,
+ * 446→44, 105→46). Rise time is comparable between methods and is NOT
+ * scaled. PID_STYLE_THRESHOLDS remain calibrated for per-step values. */
+export const DECONV_THRESHOLD_SCALE = 0.5;
 
 // ---- Step Response Metrics ----
 
@@ -752,6 +813,88 @@ export const RPM_FILTER_Q_BY_SIZE: Record<DroneSize, RpmFilterQRange> = {
 
 /** Deviation threshold (fraction) from size-appropriate Q to trigger recommendation */
 export const RPM_FILTER_Q_DEVIATION_THRESHOLD = 0.2; // 20%
+
+// ---- RPM Filter Tuning Rules (P2.6) ----
+// Source: docs/PID_TUNING_KNOWLEDGE.md Section 2 (RPM filter), measured harmonic
+// tracks from throttle-spectrogram reclassification (NoiseAnalyzer P2.2).
+
+/** Target rpm_filter_min_hz as a fraction of the dynamic-idle fundamental frequency.
+ * Notches never need to reach below the RPM floor dynamic idle enforces;
+ * a small margin below it covers transients. */
+export const RPM_MIN_HZ_IDLE_RATIO = 0.9;
+/** Same margin applied to the lowest measured fundamental-track frequency. */
+export const RPM_MIN_HZ_TRACK_RATIO = 0.9;
+/** House bounds for recommended rpm_filter_min_hz (firmware allows 30-200). */
+export const RPM_MIN_HZ_FLOOR = 40;
+export const RPM_MIN_HZ_CEILING = 150;
+/** Skip the min_hz recommendation when current is within this of the target. */
+export const RPM_MIN_HZ_DEADZONE_HZ = 15;
+/** Tolerance on measured-track frequency ratio when inferring harmonic order
+ * (|ratio − round(ratio)| must be below this to trust the order). */
+export const RPM_HARMONIC_RATIO_TOLERANCE = 0.25;
+/** Maximum rpm_filter_harmonics the harmonic-order rule will recommend. */
+export const RPM_HARMONICS_MAX = 3;
+/** BF default rpm_filter_fade_range_hz, recommended when fade is disabled. */
+export const RPM_FADE_RANGE_DEFAULT_HZ = 50;
+
+/** Community per-harmonic RPM notch weights by size (BF 4.5+ rpm_filter_weights).
+ * Second harmonic carries less energy for most props → dimmed to reduce delay. */
+export const RPM_FILTER_WEIGHTS_BY_SIZE: Record<DroneSize, [number, number, number]> = {
+  '1"': [100, 50, 100],
+  '2.5"': [100, 50, 100],
+  '3"': [100, 50, 100],
+  '4"': [100, 50, 100],
+  '5"': [90, 50, 90],
+  '6"': [90, 50, 90],
+  '7"': [90, 60, 90],
+};
+
+// ---- TF-Driven TPA Rules (P2.8) ----
+// Per-throttle-band transfer function trends drive measured tpa_rate/breakpoint
+// recommendations (vs the static size-based advisory). House thresholds.
+
+/** High-band vs low-band overshoot delta (pp) that proves TPA is too weak */
+export const TPA_TF_OVERSHOOT_DELTA_PP = 10;
+/** High-band overshoot below this while low bands overshoot → TPA too strong */
+export const TPA_TF_OVERDAMPED_OVERSHOOT_PCT = 5;
+/** tpa_rate adjustment step */
+export const TPA_TF_RATE_STEP = 10;
+/** Bounds for TF-driven tpa_rate recommendations */
+export const TPA_TF_RATE_MIN = 30;
+export const TPA_TF_RATE_MAX = 80;
+/** Minimum bands with TF data required for trend analysis */
+export const TPA_TF_MIN_BANDS = 3;
+/** Breakpoint recommendation bounds (µs) and minimum change to act on */
+export const TPA_TF_BREAKPOINT_MIN = 1250;
+export const TPA_TF_BREAKPOINT_MAX = 1750;
+export const TPA_TF_BREAKPOINT_DEADZONE = 100;
+
+// ---- Filter Latency Budget (P2.7) ----
+// Per-size total group-delay budgets for the gyro and D-term filter chains at
+// the 80 Hz reference. LPF2 enable/disable decisions weigh measured delay
+// against these instead of acting on noise level alone. Anchors: BF community
+// "even 1 ms matters" for 5" racing; larger props have slower dynamics and
+// tolerate more delay; micros are inherently noisy and need filtering headroom.
+// House values (no direct community table exists).
+
+/** Per-chain latency budget in milliseconds */
+export interface FilterLatencyBudget {
+  gyroMs: number;
+  dtermMs: number;
+}
+
+export const FILTER_LATENCY_BUDGET_BY_SIZE: Record<DroneSize, FilterLatencyBudget> = {
+  '1"': { gyroMs: 2.5, dtermMs: 4.0 },
+  '2.5"': { gyroMs: 2.5, dtermMs: 4.0 },
+  '3"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '4"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '5"': { gyroMs: 1.5, dtermMs: 3.0 },
+  '6"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '7"': { gyroMs: 2.5, dtermMs: 4.0 },
+};
+
+/** Fallback budget when drone size is unknown (matches the legacy 2 ms warning) */
+export const FILTER_LATENCY_BUDGET_DEFAULT: FilterLatencyBudget = { gyroMs: 2.0, dtermMs: 3.5 };
 
 // ---- D-term LPF Dynamic Expo ----
 // Source: docs/PID_TUNING_KNOWLEDGE.md Section 10 (Karate Race presets)

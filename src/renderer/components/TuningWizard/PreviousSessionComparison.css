@@ -1,0 +1,25 @@
+.previous-session-comparison {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-tertiary, #1e1e1e);
+  border-radius: 6px;
+}
+
+.previous-session-comparison-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--text-primary, #ddd);
+}
+
+.previous-session-comparison-subtitle {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-secondary, #888);
+}
+
+.previous-session-comparison-note {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  font-style: italic;
+}

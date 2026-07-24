@@ -1,5 +1,6 @@
 import React from 'react';
 import { RecommendationCard } from './RecommendationCard';
+import { PreviousSessionComparison } from './PreviousSessionComparison';
 import { SpectrumChart } from './charts/SpectrumChart';
 import { ThrottleSpectrogramChart } from './charts/ThrottleSpectrogramChart';
 import type { FilterAnalysisResult, AnalysisProgress } from '@shared/types/analysis.types';
@@ -134,14 +135,24 @@ export function FilterAnalysisStep({
         </div>
 
         {filterResult.mechanicalHealth &&
-          filterResult.mechanicalHealth.status !== 'ok' &&
+          filterResult.mechanicalHealth.issues.length > 0 &&
           filterResult.mechanicalHealth.issues.map((issue, i) => (
             <div
               key={i}
-              className={`analysis-warning analysis-warning--${issue.severity === 'critical' ? 'error' : 'warning'}`}
+              className={`analysis-warning analysis-warning--${
+                issue.severity === 'critical'
+                  ? 'error'
+                  : issue.severity === 'info'
+                    ? 'info'
+                    : 'warning'
+              }`}
             >
               <span className="analysis-warning-icon">
-                {issue.severity === 'critical' ? '\u274C' : '\u26A0\uFE0F'}
+                {issue.severity === 'critical'
+                  ? '\u274C'
+                  : issue.severity === 'info'
+                    ? '\u2139\uFE0F'
+                    : '\u26A0\uFE0F'}
               </span>
               <span>{issue.message}</span>
             </div>
@@ -197,7 +208,11 @@ export function FilterAnalysisStep({
               Peak marker
             </span>
           </p>
-          <SpectrumChart noise={filterResult.noise} />
+          <SpectrumChart
+            noise={filterResult.noise}
+            filterSettings={filterResult.filterSettings}
+            recommendations={filterResult.recommendations}
+          />
           <div className="axis-summary">
             {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
               const profile = filterResult.noise[axis];
@@ -234,9 +249,14 @@ export function FilterAnalysisStep({
           <div className="noise-details">
             <h4 className="chart-title">Throttle Spectrogram</h4>
             <p className="chart-description">{CHART_DESCRIPTIONS.throttleSpectrogram}</p>
-            <ThrottleSpectrogramChart data={filterResult.throttleSpectrogram} />
+            <ThrottleSpectrogramChart
+              data={filterResult.throttleSpectrogram}
+              filterSettings={filterResult.filterSettings}
+            />
           </div>
         )}
+
+        <PreviousSessionComparison mode="filter" filterResult={filterResult} />
 
         {filterResult.recommendations.length > 0 ? (
           <div className="recommendation-list">
@@ -249,6 +269,7 @@ export function FilterAnalysisStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
                 unit="Hz"
               />
             ))}

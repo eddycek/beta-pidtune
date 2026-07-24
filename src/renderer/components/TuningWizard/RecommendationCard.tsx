@@ -1,4 +1,5 @@
 import React from 'react';
+import type { RecommendationEvidence } from '@shared/types/analysis.types';
 import './RecommendationCard.css';
 
 export const SETTING_LABELS: Record<string, string> = {
@@ -49,6 +50,8 @@ interface RecommendationCardProps {
   impact: string;
   confidence: 'high' | 'medium' | 'low';
   unit?: string;
+  /** Structured evidence explaining why the rule fired (P3.1) */
+  evidence?: RecommendationEvidence;
 }
 
 export function RecommendationCard({
@@ -59,6 +62,7 @@ export function RecommendationCard({
   impact,
   confidence,
   unit,
+  evidence,
 }: RecommendationCardProps) {
   const label = SETTING_LABELS[setting] || setting;
   const change = computeChange(currentValue, recommendedValue);
@@ -89,6 +93,21 @@ export function RecommendationCard({
         )}
       </div>
       <p className="recommendation-card-reason">{reason}</p>
+      {evidence && evidence.measurements.length > 0 && (
+        <details className="recommendation-card-evidence">
+          <summary>Why? Measured evidence</summary>
+          <ul>
+            {evidence.measurements.map((m, i) => (
+              <li key={i}>
+                <span className="recommendation-card-evidence-label">{m.label}:</span> {m.value}
+              </li>
+            ))}
+          </ul>
+          {evidence.trigger && (
+            <p className="recommendation-card-evidence-trigger">{evidence.trigger}</p>
+          )}
+        </details>
+      )}
       <span className="recommendation-card-impact">{impact}</span>
     </div>
   );

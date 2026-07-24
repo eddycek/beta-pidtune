@@ -94,6 +94,58 @@ describe('ThrottleSpectrogramChart', () => {
     expect(dbLabels.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('overlays the gyro LPF1 cutoff line when filterSettings provided', () => {
+    const { container } = render(
+      <ThrottleSpectrogramChart
+        data={makeResult(5)}
+        filterSettings={{
+          gyro_lpf1_static_hz: 250,
+          gyro_lpf2_static_hz: 500,
+          dterm_lpf1_static_hz: 150,
+          dterm_lpf2_static_hz: 150,
+          dyn_notch_min_hz: 100,
+          dyn_notch_max_hz: 600,
+        }}
+      />
+    );
+    expect(container.querySelector('.spectrogram-svg polyline')).toBeInTheDocument();
+    expect(screen.getByText('Gyro LPF1')).toBeInTheDocument();
+  });
+
+  it('skips the cutoff overlay when LPF1 is disabled or out of range', () => {
+    const disabled = render(
+      <ThrottleSpectrogramChart
+        data={makeResult(5)}
+        filterSettings={{
+          gyro_lpf1_static_hz: 0,
+          gyro_lpf2_static_hz: 0,
+          dterm_lpf1_static_hz: 150,
+          dterm_lpf2_static_hz: 150,
+          dyn_notch_min_hz: 100,
+          dyn_notch_max_hz: 600,
+        }}
+      />
+    );
+    expect(disabled.container.querySelector('.spectrogram-svg polyline')).toBeNull();
+    disabled.unmount();
+
+    // Cutoff far beyond the spectrogram's max frequency (495 Hz here)
+    const outOfRange = render(
+      <ThrottleSpectrogramChart
+        data={makeResult(5)}
+        filterSettings={{
+          gyro_lpf1_static_hz: 800,
+          gyro_lpf2_static_hz: 0,
+          dterm_lpf1_static_hz: 150,
+          dterm_lpf2_static_hz: 150,
+          dyn_notch_min_hz: 100,
+          dyn_notch_max_hz: 600,
+        }}
+      />
+    );
+    expect(outOfRange.container.querySelector('.spectrogram-svg polyline')).toBeNull();
+  });
+
   it('renders nothing when neither data nor compactData provided', () => {
     const { container } = render(<ThrottleSpectrogramChart />);
     expect(container.querySelector('.spectrogram-chart')).toBeNull();

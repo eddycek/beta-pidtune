@@ -509,5 +509,10 @@ export function extractPIDMetrics(result: PIDAnalysisResult): PIDMetricsSummary 
       ? { dataQuality: { overall: result.dataQuality.overall, tier: result.dataQuality.tier } }
       : {}),
     ...(stepResponse ? { stepResponse } : {}),
+    metricsSource: [result.roll, result.pitch, result.yaw].some(
+      (a) => a.metricsSource === 'deconvolved'
+    )
+      ? 'deconvolved'
+      : 'per_step',
   };
 }
