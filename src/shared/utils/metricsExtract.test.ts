@@ -512,6 +512,7 @@ describe('extractTransferFunctionMetrics', () => {
     for (const axis of ['roll', 'pitch', 'yaw'] as const) {
       for (const key of Object.keys(metrics[axis]) as (keyof typeof metrics.roll)[]) {
         const val = metrics[axis][key];
+        if (typeof val !== 'number') continue; // phaseMarginCrossingFound is boolean
         expect(Math.round(val * 100) / 100).toBe(val);
       }
     }

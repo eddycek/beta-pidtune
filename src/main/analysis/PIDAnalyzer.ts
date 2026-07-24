@@ -69,6 +69,7 @@ import { analyzeDTermEffectiveness } from './DTermAnalyzer';
 import { mapToSliders, computeSliderDelta, buildRecommendedPIDs } from './SliderMapper';
 import {
   analyzeFeedforward,
+  deriveMaxStickRate,
   recommendFeedforward,
   recommendRCLinkBaseline,
   mergeFFRecommendations,
@@ -333,10 +334,23 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
     }
     const setpointRMS = Math.sqrt(sumSq / setpointValues.length);
 
+    const tfMetrics = extracted.tfResult.metrics;
+    const coherenceMean =
+      tfMetrics.roll.coherenceMean !== undefined &&
+      tfMetrics.pitch.coherenceMean !== undefined &&
+      tfMetrics.yaw.coherenceMean !== undefined
+        ? {
+            roll: tfMetrics.roll.coherenceMean,
+            pitch: tfMetrics.pitch.coherenceMean,
+            yaw: tfMetrics.yaw.coherenceMean,
+          }
+        : undefined;
+
     qualityResult = scoreWienerDataQuality({
       sampleCount: flightData.frameCount,
       sampleRateHz: flightData.sampleRateHz,
       setpointRMS,
+      ...(coherenceMean ? { coherenceMean } : {}),
     });
   }
 
@@ -357,7 +371,13 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
   const crossAxisCoupling =
     steps.length > 0 ? analyzeCrossAxisCoupling(steps, flightData) : undefined;
   const feedforwardAnalysis =
-    allResponses.length > 0 ? analyzeFeedforward(allResponses, feedforwardContext) : undefined;
+    allResponses.length > 0
+      ? analyzeFeedforward(
+          allResponses,
+          feedforwardContext,
+          deriveMaxStickRate(flightData.setpoint)
+        )
+      : undefined;
 
   await yieldToEventLoop();
 

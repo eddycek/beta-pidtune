@@ -99,8 +99,9 @@ const COMPONENTS: ComponentDef[] = [
       if (!source) return undefined;
       return avgNoiseFloor(source);
     },
-    best: -60,
-    worst: -20,
+    // v2 power-spectrum scale (legacy amplitude-scale anchors -60/-20 shifted +10 dB)
+    best: -50,
+    worst: -10,
   },
   {
     label: 'Tracking RMS',
@@ -151,7 +152,13 @@ const COMPONENTS: ComponentDef[] = [
     label: 'Phase Margin',
     getValue: (_filter, _pid, _verification, tf) => {
       if (!tf) return undefined;
-      return (tf.roll.phaseMarginDeg + tf.pitch.phaseMarginDeg + tf.yaw.phaseMarginDeg) / 3;
+      // Exclude axes explicitly marked as having no measured gain crossover —
+      // a capped 90° placeholder must not read as "very stable". Records from
+      // older app versions lack the flag (undefined) and are kept for
+      // backward compatibility, since their margins cannot be re-derived.
+      const axes = [tf.roll, tf.pitch, tf.yaw].filter((a) => a.phaseMarginCrossingFound !== false);
+      if (axes.length === 0) return undefined;
+      return axes.reduce((s, a) => s + a.phaseMarginDeg, 0) / axes.length;
     },
     best: 60, // 60° = very stable system
     worst: 20, // 20° = near instability

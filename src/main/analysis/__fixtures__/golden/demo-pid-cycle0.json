@@ -1,0 +1,112 @@
+{
+  "analysisMethod": "step_response",
+  "stepsDetected": 36,
+  "roll": {
+    "responses": 12,
+    "meanOvershoot": 26,
+    "meanRiseTimeMs": 30.3,
+    "meanSettlingTimeMs": 500,
+    "meanLatencyMs": 2.3,
+    "meanSteadyStateError": 2.6
+  },
+  "pitch": {
+    "responses": 12,
+    "meanOvershoot": 23.7,
+    "meanRiseTimeMs": 30.3,
+    "meanSettlingTimeMs": 499,
+    "meanLatencyMs": 1.1,
+    "meanSteadyStateError": 2.4
+  },
+  "yaw": {
+    "responses": 12,
+    "meanOvershoot": 19.1,
+    "meanRiseTimeMs": 44.5,
+    "meanSettlingTimeMs": 500,
+    "meanLatencyMs": 1.5,
+    "meanSteadyStateError": 2.7
+  },
+  "dataQuality": {
+    "tier": "excellent",
+    "overall": 93
+  },
+  "transferFunctionMetrics": null,
+  "warningCodes": [
+    "feedforward_active"
+  ],
+  "recommendations": [
+    {
+      "setting": "d_min_gain",
+      "currentValue": 20,
+      "recommendedValue": 25,
+      "ruleId": "PW-DMIN-GAIN",
+      "confidence": "medium"
+    },
+    {
+      "setting": "feedforward_averaging",
+      "currentValue": 0,
+      "recommendedValue": 2,
+      "ruleId": "FF-AVG",
+      "confidence": "medium"
+    },
+    {
+      "setting": "feedforward_jitter_factor",
+      "currentValue": 7,
+      "recommendedValue": 5,
+      "ruleId": "FF-JITTER",
+      "confidence": "medium"
+    },
+    {
+      "setting": "iterm_relax_cutoff",
+      "currentValue": 15,
+      "recommendedValue": 10,
+      "ruleId": "PW-IRELAX-CUTOFF",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_pitch_d",
+      "currentValue": 32,
+      "recommendedValue": 32,
+      "ruleId": "P-DTE-BLOCK-pid_pitch_d",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "pid_roll_d",
+      "currentValue": 30,
+      "recommendedValue": 30,
+      "ruleId": "P-DTE-BLOCK-pid_roll_d",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "pid_roll_d",
+      "currentValue": 30,
+      "recommendedValue": 50,
+      "ruleId": "P-PW-D-roll",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_yaw_d",
+      "currentValue": 0,
+      "recommendedValue": 0,
+      "ruleId": "P-DTE-BLOCK-pid_yaw_d",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "rc_smoothing_auto_factor",
+      "currentValue": 30,
+      "recommendedValue": 45,
+      "ruleId": "FF-RC-SMOOTH",
+      "confidence": "low"
+    },
+    {
+      "setting": "simplified_dmax_gain",
+      "currentValue": 1,
+      "recommendedValue": 0,
+      "ruleId": "P-DMAX-INFO",
+      "confidence": "low",
+      "informational": true
+    }
+  ]
+}

@@ -23,17 +23,19 @@ Noise floor thresholds are adjusted per drone size. Smaller quads with higher KV
 
 Classification uses strict `>` comparisons: exactly on the boundary = the lower category.
 
+All dB values are on the **v2 calibrated power-spectrum scale** (`SPECTRUM_SCALE_VERSION = 2`: detrended Hanning windows, power-domain Welch averaging, 10·log10 — a sine of amplitude A reads 10·log10(A²/2)). They sit ≈10 dB above the legacy v1 amplitude-averaged scale; stored metrics from v1 app versions are not directly comparable.
+
 | Size | HIGH (noisy) | MEDIUM | LOW (clean) | Typical KV |
 |------|-------------|--------|-------------|------------|
-| 1" | > -15 dB | > -30 and ≤ -15 | ≤ -30 | 19,000+ |
-| 2.5" | > -20 dB | > -35 and ≤ -20 | ≤ -35 | 4,500+ |
-| 3" | > -25 dB | > -40 and ≤ -25 | ≤ -40 | 3,000-4,500 |
-| 4" | > -27 dB | > -40 and ≤ -27 | ≤ -40 | 2,500-3,500 |
-| 5" | > -30 dB | > -50 and ≤ -30 | ≤ -50 | 1,750-2,100 |
-| 6" | > -33 dB | > -50 and ≤ -33 | ≤ -50 | 1,300-1,500 |
-| 7" | > -35 dB | > -55 and ≤ -35 | ≤ -55 | 1,100-1,300 |
+| 1" | > -5 dB | > -20 and ≤ -5 | ≤ -20 | 19,000+ |
+| 2.5" | > -10 dB | > -25 and ≤ -10 | ≤ -25 | 4,500+ |
+| 3" | > -15 dB | > -30 and ≤ -15 | ≤ -30 | 3,000-4,500 |
+| 4" | > -17 dB | > -30 and ≤ -17 | ≤ -30 | 2,500-3,500 |
+| 5" | > -20 dB | > -40 and ≤ -20 | ≤ -40 | 1,750-2,100 |
+| 6" | > -23 dB | > -40 and ≤ -23 | ≤ -40 | 1,300-1,500 |
+| 7" | > -25 dB | > -45 and ≤ -25 | ≤ -45 | 1,100-1,300 |
 
-**Source**: PIDToolBox -30 dB standard (5" reference), scaled by KV/prop-size relationship.
+**Source**: PIDToolBox -30 dB standard (5" reference, amplitude-dB convention) shifted +10 dB to the v2 power-spectrum scale, scaled by KV/prop-size relationship.
 
 **Implementation**: `NOISE_LEVEL_BY_SIZE` in `src/main/analysis/constants.ts`, consumed by `NoiseAnalyzer.categorizeNoiseLevel()`.
 
@@ -93,6 +95,7 @@ Classification uses strict `>` comparisons: exactly on the boundary = the lower 
 Propwash is evaluated via PropWashDetector during PID Tune and Flash Tune analysis:
 
 - **Detection**: Throttle-down events with post-event FFT in 20-90 Hz band
+- **Baseline**: Severity ratio is measured against a clean-segment baseline — band energy of contiguous runs outside every drop + post-drop window (falls back to the whole flight when no clean run ≥ 1024 samples)
 - **Metrics**: Mean severity ratio, worst axis, dominant frequency
 - **Severity scale**: minimal (< 2.0), moderate (2.0-5.0), severe (≥ 5.0)
 - **Impact on recommendations**: Triggers d_min gain adjustment, iterm_relax cutoff reduction, TPA mode/breakpoint changes
@@ -110,9 +113,13 @@ The flight quality score (0-100) uses type-aware components:
 
 When verification data is present, a **Noise Delta** component is added (improvement/regression dB).
 
+Noise-floor scoring anchors are on the v2 power-spectrum scale (best -50 dB, worst -10 dB). The Phase Margin component skips axes without a measured gain crossover (`phaseMarginCrossingFound === false`) — the 90° cap is a sentinel, not a measurement.
+
 **Implementation**: `src/shared/utils/tuneQualityScore.ts`
 
 ## Convergence Detection
+
+**Cross-scale guard**: `FilterMetricsSummary` records are stamped with `spectrumScaleVersion` at write time. When the initial and verification flights were measured on different scale versions (e.g. a v1-stored flight vs a v2 measurement after an app update), the ConvergenceDetector refuses the noise-floor comparison and reports a neutral "continue" — the ~+10 dB scale shift would otherwise read as a huge regression. Flash convergence also skips the cross-scale noise check and ignores 90° phase-margin placeholders (`phaseMarginCrossingFound = false`).
 
 A tuning mode is considered converged when:
 1. Recommended changes are all within deadzone thresholds

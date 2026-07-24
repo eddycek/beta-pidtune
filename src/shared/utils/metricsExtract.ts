@@ -18,6 +18,7 @@ import type {
   TransferFunctionMetricsSummary,
 } from '../types/tuning-history.types';
 import type { ThrottleSpectrogramResult } from '../types/analysis.types';
+import { SPECTRUM_SCALE_VERSION } from '../constants';
 
 /**
  * Downsample a full-resolution FFT spectrum to a fixed number of bins.
@@ -213,6 +214,7 @@ export function extractFilterMetrics(result: FilterAnalysisResult): FilterMetric
 
   return {
     noiseLevel: result.noise.overallLevel,
+    spectrumScaleVersion: SPECTRUM_SCALE_VERSION,
     roll: {
       noiseFloorDb: round2(result.noise.roll.noiseFloorDb),
       peakCount: result.noise.roll.peaks.length,
@@ -329,6 +331,7 @@ interface TFMetricsInput {
   settlingTimeMs: number;
   riseTimeMs: number;
   dcGainDb?: number;
+  phaseMarginCrossingFound?: boolean;
 }
 
 /** Throttle-band TF summary input (matches PIDAnalysisResult.throttleTF shape) */
@@ -359,6 +362,9 @@ export function extractTransferFunctionMetrics(
     overshootPercent: round2(m.overshootPercent),
     settlingTimeMs: round2(m.settlingTimeMs),
     riseTimeMs: round2(m.riseTimeMs),
+    ...(m.phaseMarginCrossingFound !== undefined
+      ? { phaseMarginCrossingFound: m.phaseMarginCrossingFound }
+      : {}),
   });
 
   // Extract per-axis DC gain if available

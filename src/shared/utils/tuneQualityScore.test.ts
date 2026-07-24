@@ -9,9 +9,9 @@ import type {
 
 const perfectFilter: FilterMetricsSummary = {
   noiseLevel: 'low',
-  roll: { noiseFloorDb: -60, peakCount: 0 },
-  pitch: { noiseFloorDb: -60, peakCount: 0 },
-  yaw: { noiseFloorDb: -60, peakCount: 0 },
+  roll: { noiseFloorDb: -50, peakCount: 0 },
+  pitch: { noiseFloorDb: -50, peakCount: 0 },
+  yaw: { noiseFloorDb: -50, peakCount: 0 },
   segmentsUsed: 5,
   summary: 'Perfect',
 };
@@ -49,9 +49,9 @@ const perfectPID: PIDMetricsSummary = {
 
 const worstFilter: FilterMetricsSummary = {
   noiseLevel: 'high',
-  roll: { noiseFloorDb: -20, peakCount: 5 },
-  pitch: { noiseFloorDb: -20, peakCount: 5 },
-  yaw: { noiseFloorDb: -20, peakCount: 5 },
+  roll: { noiseFloorDb: -10, peakCount: 5 },
+  pitch: { noiseFloorDb: -10, peakCount: 5 },
+  yaw: { noiseFloorDb: -10, peakCount: 5 },
   segmentsUsed: 1,
   summary: 'Terrible',
 };
@@ -117,9 +117,9 @@ describe('computeTuneQualityScore', () => {
   it('returns mid-range score for mid-range metrics', () => {
     const midFilter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -40, peakCount: 2 },
-      pitch: { noiseFloorDb: -40, peakCount: 2 },
-      yaw: { noiseFloorDb: -40, peakCount: 2 },
+      roll: { noiseFloorDb: -30, peakCount: 2 },
+      pitch: { noiseFloorDb: -30, peakCount: 2 },
+      yaw: { noiseFloorDb: -30, peakCount: 2 },
     };
     const midPID: PIDMetricsSummary = {
       ...perfectPID,
@@ -191,9 +191,9 @@ describe('computeTuneQualityScore', () => {
     // With 4 components × 25 pts, we need exactly 20 per component → 80%
     const filter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -52, peakCount: 0 }, // (52-20)/(60-20) = 0.8 → 20 pts
-      pitch: { noiseFloorDb: -52, peakCount: 0 },
-      yaw: { noiseFloorDb: -52, peakCount: 0 },
+      roll: { noiseFloorDb: -42, peakCount: 0 }, // (42-10)/(50-10) = 0.8 → 20 pts
+      pitch: { noiseFloorDb: -42, peakCount: 0 },
+      yaw: { noiseFloorDb: -42, peakCount: 0 },
     };
     const pid: PIDMetricsSummary = {
       ...perfectPID,
@@ -225,9 +225,9 @@ describe('computeTuneQualityScore', () => {
   it('tier boundary: 79 → good', () => {
     const filter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -51, peakCount: 0 },
-      pitch: { noiseFloorDb: -51, peakCount: 0 },
-      yaw: { noiseFloorDb: -51, peakCount: 0 },
+      roll: { noiseFloorDb: -41, peakCount: 0 },
+      pitch: { noiseFloorDb: -41, peakCount: 0 },
+      yaw: { noiseFloorDb: -41, peakCount: 0 },
     };
     const pid: PIDMetricsSummary = {
       ...perfectPID,
@@ -261,9 +261,9 @@ describe('computeTuneQualityScore', () => {
     // Score ~60
     const filter60: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -44, peakCount: 0 },
-      pitch: { noiseFloorDb: -44, peakCount: 0 },
-      yaw: { noiseFloorDb: -44, peakCount: 0 },
+      roll: { noiseFloorDb: -34, peakCount: 0 },
+      pitch: { noiseFloorDb: -34, peakCount: 0 },
+      yaw: { noiseFloorDb: -34, peakCount: 0 },
     };
     const pid60: PIDMetricsSummary = {
       ...perfectPID,
@@ -295,9 +295,9 @@ describe('computeTuneQualityScore', () => {
   it('clamps values beyond range (better than best)', () => {
     const superFilter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -80, peakCount: 0 },
-      pitch: { noiseFloorDb: -80, peakCount: 0 },
-      yaw: { noiseFloorDb: -80, peakCount: 0 },
+      roll: { noiseFloorDb: -70, peakCount: 0 },
+      pitch: { noiseFloorDb: -70, peakCount: 0 },
+      yaw: { noiseFloorDb: -70, peakCount: 0 },
     };
     const result = computeTuneQualityScore({ filterMetrics: superFilter, pidMetrics: perfectPID });
     expect(result).not.toBeNull();
@@ -359,9 +359,9 @@ describe('computeTuneQualityScore', () => {
   it('tier boundary: 40/39', () => {
     const filter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -36, peakCount: 0 },
-      pitch: { noiseFloorDb: -36, peakCount: 0 },
-      yaw: { noiseFloorDb: -36, peakCount: 0 },
+      roll: { noiseFloorDb: -26, peakCount: 0 },
+      pitch: { noiseFloorDb: -26, peakCount: 0 },
+      yaw: { noiseFloorDb: -26, peakCount: 0 },
     };
     const pid: PIDMetricsSummary = {
       ...perfectPID,
@@ -559,9 +559,9 @@ describe('computeTuneQualityScore', () => {
       };
       const midFilter: FilterMetricsSummary = {
         ...perfectFilter,
-        roll: { noiseFloorDb: -40, peakCount: 2 },
-        pitch: { noiseFloorDb: -40, peakCount: 2 },
-        yaw: { noiseFloorDb: -40, peakCount: 2 },
+        roll: { noiseFloorDb: -30, peakCount: 2 },
+        pitch: { noiseFloorDb: -30, peakCount: 2 },
+        yaw: { noiseFloorDb: -30, peakCount: 2 },
       };
       const result = computeTuneQualityScore({
         filterMetrics: midFilter,
@@ -570,7 +570,7 @@ describe('computeTuneQualityScore', () => {
       });
       expect(result).not.toBeNull();
       // 4 components × 25 pts each:
-      // NF: (-40-(-20))/(-60-(-20)) = 0.5 → round(0.5*25) = 13
+      // NF: (-30-(-10))/(-50-(-10)) = 0.5 → round(0.5*25) = 13
       // OS: (25-50)/(0-50) = 0.5 → round(0.5*25) = 13
       // PM: (37.5-20)/(60-20) = 0.4375 → round(0.4375*25) = 11
       // BW: (45-20)/(80-20) = 0.4167 → round(0.4167*25) = 10
@@ -635,23 +635,23 @@ describe('computeTuneQualityScore', () => {
   describe('verification metrics integration', () => {
     const noisyFilter: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -30, peakCount: 3 },
-      pitch: { noiseFloorDb: -30, peakCount: 3 },
-      yaw: { noiseFloorDb: -30, peakCount: 3 },
+      roll: { noiseFloorDb: -20, peakCount: 3 },
+      pitch: { noiseFloorDb: -20, peakCount: 3 },
+      yaw: { noiseFloorDb: -20, peakCount: 3 },
     };
 
     const cleanVerification: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -55, peakCount: 0 },
-      pitch: { noiseFloorDb: -55, peakCount: 0 },
-      yaw: { noiseFloorDb: -55, peakCount: 0 },
+      roll: { noiseFloorDb: -45, peakCount: 0 },
+      pitch: { noiseFloorDb: -45, peakCount: 0 },
+      yaw: { noiseFloorDb: -45, peakCount: 0 },
     };
 
     const degradedVerification: FilterMetricsSummary = {
       ...perfectFilter,
-      roll: { noiseFloorDb: -25, peakCount: 4 },
-      pitch: { noiseFloorDb: -25, peakCount: 4 },
-      yaw: { noiseFloorDb: -25, peakCount: 4 },
+      roll: { noiseFloorDb: -15, peakCount: 4 },
+      pitch: { noiseFloorDb: -15, peakCount: 4 },
+      yaw: { noiseFloorDb: -15, peakCount: 4 },
     };
 
     it('uses verification noise floor instead of filter when available', () => {
@@ -697,28 +697,28 @@ describe('computeTuneQualityScore', () => {
     });
 
     it('rewards noise improvement in Noise Delta', () => {
-      // Filter flight: -30 dB, verification: -55 dB → 25 dB improvement
+      // Filter flight: -20 dB, verification: -45 dB → 25 dB improvement
       const result = computeTuneQualityScore({
         filterMetrics: noisyFilter,
         pidMetrics: perfectPID,
         verificationMetrics: cleanVerification,
       });
       const deltaComponent = result!.components.find((c) => c.label === 'Noise Delta')!;
-      // rawValue = verificationAvg - filterAvg = -55 - (-30) = -25
+      // rawValue = verificationAvg - filterAvg = -45 - (-20) = -25
       expect(deltaComponent.rawValue).toBeLessThan(0);
       // Should get full score (best = -10, -25 is even better → clamped to max)
       expect(deltaComponent.score).toBe(deltaComponent.maxPoints);
     });
 
     it('penalizes noise regression in Noise Delta', () => {
-      // Filter flight: -55 dB, verification: -25 dB → 30 dB regression
+      // Filter flight: -45 dB, verification: -15 dB → 30 dB regression
       const result = computeTuneQualityScore({
         filterMetrics: cleanVerification,
         pidMetrics: perfectPID,
         verificationMetrics: degradedVerification,
       });
       const deltaComponent = result!.components.find((c) => c.label === 'Noise Delta')!;
-      // rawValue = -25 - (-55) = +30 dB regression
+      // rawValue = -15 - (-45) = +30 dB regression
       expect(deltaComponent.rawValue).toBeGreaterThan(0);
       // Should get zero score (worst = +5, +30 is way worse → clamped to 0)
       expect(deltaComponent.score).toBe(0);

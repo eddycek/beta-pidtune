@@ -599,36 +599,29 @@ export interface PIDAnalysisResult {
   };
   /** Per-axis transfer function metrics (only present for Wiener deconvolution analysis) */
   transferFunctionMetrics?: {
-    roll: {
-      bandwidthHz: number;
-      phaseMarginDeg: number;
-      gainMarginDb: number;
-      overshootPercent: number;
-      settlingTimeMs: number;
-      riseTimeMs: number;
-      dcGainDb?: number;
-    };
-    pitch: {
-      bandwidthHz: number;
-      phaseMarginDeg: number;
-      gainMarginDb: number;
-      overshootPercent: number;
-      settlingTimeMs: number;
-      riseTimeMs: number;
-      dcGainDb?: number;
-    };
-    yaw: {
-      bandwidthHz: number;
-      phaseMarginDeg: number;
-      gainMarginDb: number;
-      overshootPercent: number;
-      settlingTimeMs: number;
-      riseTimeMs: number;
-      dcGainDb?: number;
-    };
+    roll: AxisTransferFunctionMetrics;
+    pitch: AxisTransferFunctionMetrics;
+    yaw: AxisTransferFunctionMetrics;
   };
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
+}
+
+/** Per-axis transfer function metrics (mirrors TransferFunctionEstimator.TransferFunctionMetrics) */
+export interface AxisTransferFunctionMetrics {
+  bandwidthHz: number;
+  phaseMarginDeg: number;
+  gainMarginDb: number;
+  overshootPercent: number;
+  settlingTimeMs: number;
+  riseTimeMs: number;
+  dcGainDb?: number;
+  /** Mean setpoint→gyro coherence over the stick-input band (0-1) */
+  coherenceMean?: number;
+  /** False when the phase never crossed -180° (gainMarginDb is the cap) */
+  gainMarginCrossingFound?: boolean;
+  /** False when the gain never crossed 0 dB (phaseMarginDeg is the cap) */
+  phaseMarginCrossingFound?: boolean;
 }
 
 // ---- D-Term Effectiveness Types ----

@@ -1,0 +1,132 @@
+{
+  "analysisMethod": "step_response",
+  "stepsDetected": 24,
+  "roll": {
+    "responses": 5,
+    "meanOvershoot": 52.3,
+    "meanRiseTimeMs": 216.2,
+    "meanSettlingTimeMs": 495,
+    "meanLatencyMs": 141,
+    "meanSteadyStateError": 1.3
+  },
+  "pitch": {
+    "responses": 12,
+    "meanOvershoot": 56.6,
+    "meanRiseTimeMs": 113.9,
+    "meanSettlingTimeMs": 499,
+    "meanLatencyMs": 7.8,
+    "meanSteadyStateError": 11.5
+  },
+  "yaw": {
+    "responses": 7,
+    "meanOvershoot": 62.9,
+    "meanRiseTimeMs": 107.7,
+    "meanSettlingTimeMs": 497,
+    "meanLatencyMs": 171.5,
+    "meanSteadyStateError": 7.1
+  },
+  "dataQuality": {
+    "tier": "excellent",
+    "overall": 100
+  },
+  "transferFunctionMetrics": null,
+  "warningCodes": [
+    "feedforward_active"
+  ],
+  "recommendations": [
+    {
+      "setting": "dyn_idle_min_rpm",
+      "currentValue": 0,
+      "recommendedValue": 45,
+      "ruleId": "P-DYN-IDLE",
+      "confidence": "low"
+    },
+    {
+      "setting": "pid_pitch_d",
+      "currentValue": 46,
+      "recommendedValue": 36,
+      "ruleId": "P-DR-OD-pitch",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_pitch_d",
+      "currentValue": 46,
+      "recommendedValue": 46,
+      "ruleId": "P-DTE-BLOCK-pid_pitch_d",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "pid_pitch_i",
+      "currentValue": 84,
+      "recommendedValue": 94,
+      "ruleId": "P-SSE-I-pitch",
+      "confidence": "high"
+    },
+    {
+      "setting": "pid_pitch_p",
+      "currentValue": 47,
+      "recommendedValue": 42,
+      "ruleId": "P-OS-P-pitch",
+      "confidence": "high"
+    },
+    {
+      "setting": "pid_roll_d",
+      "currentValue": 40,
+      "recommendedValue": 34,
+      "ruleId": "P-DR-OD-roll",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_roll_d",
+      "currentValue": 40,
+      "recommendedValue": 40,
+      "ruleId": "P-DTE-BLOCK-pid_roll_d",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "pid_roll_p",
+      "currentValue": 45,
+      "recommendedValue": 40,
+      "ruleId": "P-OS-P-roll",
+      "confidence": "high"
+    },
+    {
+      "setting": "pid_yaw_i",
+      "currentValue": 80,
+      "recommendedValue": 85,
+      "ruleId": "P-SSE-I-yaw",
+      "confidence": "medium"
+    },
+    {
+      "setting": "simplified_dmax_gain",
+      "currentValue": 1,
+      "recommendedValue": 0,
+      "ruleId": "P-DMAX-INFO",
+      "confidence": "low",
+      "informational": true
+    },
+    {
+      "setting": "thrust_linear",
+      "currentValue": 0,
+      "recommendedValue": 40,
+      "ruleId": "P-THRUST-LIN",
+      "confidence": "low"
+    },
+    {
+      "setting": "tpa_low_always",
+      "currentValue": 0,
+      "recommendedValue": 1,
+      "ruleId": "P-TPA",
+      "confidence": "low"
+    },
+    {
+      "setting": "vbat_sag_compensation",
+      "currentValue": 0,
+      "recommendedValue": 75,
+      "ruleId": "P-VBAT-SAG",
+      "confidence": "low"
+    }
+  ]
+}

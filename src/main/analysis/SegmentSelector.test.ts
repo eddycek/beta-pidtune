@@ -16,11 +16,13 @@ function createFlightData(opts: {
   throttle?: (i: number) => number;
   gyroRoll?: (i: number) => number;
   gyroPitch?: (i: number) => number;
+  gyroYaw?: (i: number) => number;
 }): BlackboxFlightData {
   const { sampleRate, numSamples } = opts;
   const throttleFn = opts.throttle || (() => 0.5);
   const rollFn = opts.gyroRoll || (() => 0);
   const pitchFn = opts.gyroPitch || (() => 0);
+  const yawFn = opts.gyroYaw || (() => 0);
 
   function makeSeries(fn: (i: number) => number): TimeSeries {
     const time = new Float64Array(numSamples);
@@ -35,7 +37,7 @@ function createFlightData(opts: {
   const zeroSeries = makeSeries(() => 0);
 
   return {
-    gyro: [makeSeries(rollFn), makeSeries(pitchFn), makeSeries(() => 0)],
+    gyro: [makeSeries(rollFn), makeSeries(pitchFn), makeSeries(yawFn)],
     setpoint: [zeroSeries, zeroSeries, zeroSeries, makeSeries(throttleFn)],
     pidP: [zeroSeries, zeroSeries, zeroSeries],
     pidI: [zeroSeries, zeroSeries, zeroSeries],
@@ -443,5 +445,29 @@ describe('findThrottleSweepSegments', () => {
     expect(segments[0].minThrottle).toBeLessThan(segments[0].maxThrottle);
     expect(segments[0].minThrottle).toBeCloseTo(0.2, 1);
     expect(segments[0].maxThrottle).toBeCloseTo(0.9, 1);
+  });
+});
+
+describe('yaw steadiness (relaxed threshold)', () => {
+  it('rejects segments with an active yaw spin', () => {
+    // Roll/pitch steady, yaw spinning hard (std >> 75 deg/s)
+    const data = createFlightData({
+      sampleRate: 1000,
+      numSamples: 4000,
+      throttle: () => 0.5,
+      gyroYaw: (i) => 300 * Math.sin(i * 0.3),
+    });
+    expect(findSteadySegments(data).length).toBe(0);
+  });
+
+  it('tolerates moderate yaw noise above the roll/pitch limit', () => {
+    // Yaw std ~60 deg/s: above GYRO_STEADY_MAX_STD (50) but below 50×1.5
+    const data = createFlightData({
+      sampleRate: 1000,
+      numSamples: 4000,
+      throttle: () => 0.5,
+      gyroYaw: (i) => 85 * Math.sin(i * 0.3),
+    });
+    expect(findSteadySegments(data).length).toBeGreaterThan(0);
   });
 });

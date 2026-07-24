@@ -27,6 +27,7 @@ import {
   NOISE_FLOOR_VERY_CLEAN_DB,
   NOISE_TARGET_DEADZONE_HZ,
   RESONANCE_ACTION_THRESHOLD_DB,
+  PEAK_MIN_SPACING_HZ,
   RESONANCE_CUTOFF_MARGIN_HZ,
   PROPWASH_GYRO_LPF1_FLOOR_HZ,
   PROPWASH_FLOOR_BYPASS_DB,
@@ -100,8 +101,57 @@ export function recommend(
   // 6. LPF2 recommendations (disable when clean + RPM, enable when noisy)
   recommendLpf2Adjustments(noise, current, recommendations, rpmActive);
 
+  // 7. Yaw-only resonance observation (informational — yaw never drives LPF cutoffs)
+  recommendYawResonanceObservation(noise, current, recommendations);
+
   // Deduplicate: if multiple rules recommend the same setting, keep the more aggressive one
   return deduplicateRecommendations(recommendations);
+}
+
+/**
+ * Surface strong yaw-only noise peaks that no other rule covers.
+ *
+ * Yaw is deliberately excluded from LPF cutoff decisions (inherently noisier;
+ * lowering a global LPF for a yaw-only peak taxes roll/pitch latency) and
+ * from the notch-range rules only when the notch already covers the peak.
+ * A strong yaw peak that the dynamic notch cannot handle and that no
+ * roll/pitch rule will act on still deserves the pilot's attention — it
+ * often indicates a loose stack, tension mismatch, or yaw-axis frame flex.
+ */
+function recommendYawResonanceObservation(
+  noise: NoiseProfile,
+  current: CurrentFilterSettings,
+  out: FilterRecommendation[]
+): void {
+  const rollPitchPeaks = [...noise.roll.peaks, ...noise.pitch.peaks].filter(
+    (p) => p.amplitude >= RESONANCE_ACTION_THRESHOLD_DB
+  );
+
+  const yawOnlyPeaks = noise.yaw.peaks.filter(
+    (p) =>
+      p.amplitude >= RESONANCE_ACTION_THRESHOLD_DB &&
+      !isPeakInDynNotchRange(p.frequency, current) &&
+      // Skip peaks that also appear on roll/pitch — those rules already act
+      !rollPitchPeaks.some((rp) => Math.abs(rp.frequency - p.frequency) < PEAK_MIN_SPACING_HZ)
+  );
+
+  if (yawOnlyPeaks.length === 0) return;
+
+  const strongest = yawOnlyPeaks.reduce((a, b) => (b.amplitude > a.amplitude ? b : a));
+  out.push({
+    setting: 'dyn_notch_count',
+    currentValue: current.dyn_notch_count ?? 3,
+    recommendedValue: current.dyn_notch_count ?? 3,
+    reason:
+      `A strong yaw-only noise peak was detected at ${Math.round(strongest.frequency)} Hz ` +
+      `(${Math.round(strongest.amplitude)} dB above the floor) that the dynamic notch does not cover. ` +
+      'Yaw peaks like this often point to a loose FC stack, uneven motor mounting, or frame flex — ' +
+      'inspect hardware, or extend the dynamic notch range to cover it.',
+    impact: 'noise',
+    confidence: 'low',
+    informational: true,
+    ruleId: 'F-YAW-RES',
+  });
 }
 
 /**
@@ -680,8 +730,18 @@ function recommendDynamicNotchForRPM(
  */
 function deduplicateRecommendations(recs: FilterRecommendation[]): FilterRecommendation[] {
   const byKey = new Map<string, FilterRecommendation>();
+  // Informational observations pass through unmerged: their currentValue ===
+  // recommendedValue no-op must never replace (or inherit confidence from) a
+  // real recommendation that happens to share the setting name (e.g. the
+  // F-YAW-RES observation vs an actionable F-DN-COUNT reduction). The
+  // renderer already excludes informational/no-op recs from apply.
+  const informational: FilterRecommendation[] = [];
 
   for (const rec of recs) {
+    if (rec.informational) {
+      informational.push(rec);
+      continue;
+    }
     const existing = byKey.get(rec.setting);
     if (!existing) {
       byKey.set(rec.setting, rec);
@@ -710,7 +770,7 @@ function deduplicateRecommendations(recs: FilterRecommendation[]): FilterRecomme
     }
   }
 
-  return Array.from(byKey.values());
+  return [...byKey.values(), ...informational];
 }
 
 /**

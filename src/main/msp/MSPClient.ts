@@ -891,7 +891,23 @@ export class MSPClient extends EventEmitter {
       itermRelax: readField(response.data, PID_ADVANCED.ITERM_RELAX), // iterm_relax
       itermRelaxType: readField(response.data, PID_ADVANCED.ITERM_RELAX_TYPE), // iterm_relax_type
       itermRelaxCutoff: readField(response.data, PID_ADVANCED.ITERM_RELAX_CUTOFF), // iterm_relax_cutoff
+      averaging: readField(response.data, PID_ADVANCED.FF_AVERAGING), // feedforward_averaging
+      dynIdleMinRpm: readField(response.data, PID_ADVANCED.IDLE_MIN_RPM), // dyn_idle_min_rpm
     };
+
+    // Fields beyond the minimum layout — present on longer responses only
+    if (response.data.length > PID_ADVANCED.THRUST_LINEARIZATION.offset) {
+      config.vbatSagCompensation = readField(response.data, PID_ADVANCED.VBAT_SAG_COMPENSATION); // vbat_sag_compensation
+      config.thrustLinear = readField(response.data, PID_ADVANCED.THRUST_LINEARIZATION); // thrust_linear
+    }
+    // TPA fields were appended in API 1.45 — a response long enough to carry
+    // them also guarantees the API >= 1.45 meaning of anti_gravity_gain @21
+    if (response.data.length > PID_ADVANCED.TPA_BREAKPOINT.offset + 1) {
+      config.antiGravityGain = readField(response.data, PID_ADVANCED.ANTI_GRAVITY_GAIN); // anti_gravity_gain
+      config.tpaMode = readField(response.data, PID_ADVANCED.TPA_MODE); // tpa_mode
+      config.tpaRate = readField(response.data, PID_ADVANCED.TPA_RATE); // tpa_rate
+      config.tpaBreakpoint = readField(response.data, PID_ADVANCED.TPA_BREAKPOINT); // tpa_breakpoint
+    }
 
     logger.info('Feedforward configuration read:', config);
     return config;

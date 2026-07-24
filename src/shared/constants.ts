@@ -1,6 +1,15 @@
 declare const __APP_VERSION__: string;
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0-dev';
 
+/**
+ * Spectrum scale version. v2 = calibrated one-sided power spectrum (see
+ * src/main/analysis/FFTCompute.ts). dB values on the v2 scale sit ≈10 dB
+ * above legacy v1 (amplitude-averaged) values, so stored metrics from
+ * different scale versions are NOT directly comparable. Stamped into
+ * FilterMetricsSummary at write time; records without the field are v1.
+ */
+export const SPECTRUM_SCALE_VERSION = 2;
+
 export const MSP = {
   DEFAULT_BAUD_RATE: 115200,
   CONNECTION_TIMEOUT: 5000,

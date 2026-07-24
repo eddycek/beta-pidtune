@@ -46,9 +46,9 @@ function makeNoiseProfile(opts: {
   yawPeaks?: NoisePeak[];
 }): NoiseProfile {
   return {
-    roll: makeAxisProfile(opts.rollFloor ?? -50, opts.rollPeaks),
-    pitch: makeAxisProfile(opts.pitchFloor ?? -50, opts.pitchPeaks),
-    yaw: makeAxisProfile(opts.yawFloor ?? -50, opts.yawPeaks),
+    roll: makeAxisProfile(opts.rollFloor ?? -40, opts.rollPeaks),
+    pitch: makeAxisProfile(opts.pitchFloor ?? -40, opts.pitchPeaks),
+    yaw: makeAxisProfile(opts.yawFloor ?? -40, opts.yawPeaks),
     overallLevel: opts.level,
   };
 }
@@ -63,8 +63,8 @@ describe('computeNoiseBasedTarget', () => {
   });
 
   it('should interpolate linearly for mid-range noise', () => {
-    // Midpoint: (-10 + -70) / 2 = -40 → (75 + 300) / 2 = 187.5 → 188
-    const target = computeNoiseBasedTarget(-40, 75, 300);
+    // Midpoint: (0 + -60) / 2 = -30 → (75 + 300) / 2 = 187.5 → 188
+    const target = computeNoiseBasedTarget(-30, 75, 300);
     expect(target).toBe(188);
   });
 
@@ -79,7 +79,7 @@ describe('computeNoiseBasedTarget', () => {
 
 describe('recommend', () => {
   it('should recommend noise-based targets for high noise', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -98,7 +98,7 @@ describe('recommend', () => {
   });
 
   it('should recommend noise-based targets for low noise', () => {
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -65, pitchFloor: -60 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 150,
@@ -119,7 +119,7 @@ describe('recommend', () => {
   it('should not recommend changes for medium noise when settings are close to target', () => {
     // Noise floors (-50 dB) produce target ~225 Hz for gyro, ~157 Hz for dterm
     // Set current values within 20 Hz deadzone of targets
-    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -50, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -40, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 225, // Exactly at target
@@ -136,7 +136,7 @@ describe('recommend', () => {
   it('should recommend changes for medium noise when settings are far from target', () => {
     // Noise floor -50 dB produces target ~225 Hz for gyro, ~157 Hz for dterm
     // Current settings are far off → should recommend with low confidence
-    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -50, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -40, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 100, // Far below target (~225)
@@ -154,7 +154,7 @@ describe('recommend', () => {
 
   it('should respect minimum safety bounds', () => {
     // Very noisy noise floor → target will be at min
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -5, pitchFloor: -5 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: 5, pitchFloor: 5 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: GYRO_LPF1_MIN_HZ,
@@ -171,7 +171,7 @@ describe('recommend', () => {
 
   it('should respect maximum safety bounds', () => {
     // Very clean noise floor → target will be at max
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -75, pitchFloor: -75 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -65, pitchFloor: -65 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: GYRO_LPF1_MAX_HZ,
@@ -189,7 +189,7 @@ describe('recommend', () => {
   it('should not recommend when target is within deadzone of current', () => {
     // Noise floor that produces a target close to the current setting
     // Target for gyro with floor -50: t = (-50 - (-10)) / (-60) = 0.667, target = 75 + 0.667 * 225 = 225
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -50, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -40, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 225, // Exactly at target
@@ -356,7 +356,7 @@ describe('recommend', () => {
   });
 
   it('should skip gyro LPF noise-floor adjustment when gyro_lpf1 is disabled (0)', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 0, // Disabled (common with RPM filter)
@@ -393,8 +393,8 @@ describe('recommend', () => {
     // High noise + resonance peak both want to lower gyro_lpf1
     const noise = makeNoiseProfile({
       level: 'high',
-      rollFloor: -25,
-      pitchFloor: -25,
+      rollFloor: -15,
+      pitchFloor: -15,
       rollPeaks: [{ frequency: 180, amplitude: 15, type: 'frame_resonance' }],
     });
 
@@ -409,7 +409,7 @@ describe('recommend', () => {
   });
 
   it('should provide beginner-friendly reason strings', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
 
     for (const rec of recs) {
@@ -421,7 +421,7 @@ describe('recommend', () => {
   });
 
   it('should set appropriate impact values', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
 
     for (const rec of recs) {
@@ -430,7 +430,7 @@ describe('recommend', () => {
   });
 
   it('should set appropriate confidence values', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
 
     for (const rec of recs) {
@@ -439,7 +439,7 @@ describe('recommend', () => {
   });
 
   it('should converge: applying recommendations and re-running produces no further changes', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const initial: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -474,7 +474,7 @@ describe('generateSummary', () => {
   });
 
   it('should mention high noise level', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
     const summary = generateSummary(noise, recs);
     expect(summary).toMatch(/vibration|noise/i);
@@ -499,7 +499,7 @@ describe('generateSummary', () => {
   });
 
   it('should state number of recommended changes', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
     const summary = generateSummary(noise, recs);
     expect(summary).toMatch(/\d+ filter change/);
@@ -528,7 +528,7 @@ describe('isRpmFilterActive', () => {
 
 describe('RPM-aware recommendations', () => {
   it('should use wider bounds (RPM max) for low noise with RPM active', () => {
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -75, pitchFloor: -75 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -65, pitchFloor: -65 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: GYRO_LPF1_MAX_HZ, // At non-RPM max (300)
@@ -601,7 +601,7 @@ describe('RPM-aware recommendations', () => {
 
   it('should produce unchanged behavior (regression) when RPM state is unknown', () => {
     // Without RPM fields, should behave exactly as before
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -616,7 +616,7 @@ describe('RPM-aware recommendations', () => {
   });
 
   it('should include RPM note in reason strings when RPM active', () => {
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -65, pitchFloor: -60 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 150,
@@ -636,7 +636,7 @@ describe('propwash-aware filter floor', () => {
     // Noise floor -16 dB: noisy enough for a low target, but below bypass threshold (-15)
     // Raw target: 75 + ((-16 - (-10)) / (-60)) * 225 = 75 + (6/60)*225 = 75 + 22.5 = 97.5 → 98 Hz
     // 98 < PROPWASH_GYRO_LPF1_FLOOR_HZ (100) and -16 <= -15 → floor applied → 100 Hz
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -16, pitchFloor: -16 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -6, pitchFloor: -6 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -653,7 +653,7 @@ describe('propwash-aware filter floor', () => {
     // Noise floor -12 dB: extremely noisy, above bypass threshold (-15)
     // Raw target: 75 + ((-12 - (-10)) / (-60)) * 225 = 75 + (2/60)*225 = 75 + 7.5 = 82.5 → 83 Hz
     // -12 > -15 → bypass propwash floor → 83 Hz
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -12, pitchFloor: -12 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -2, pitchFloor: -2 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -670,7 +670,7 @@ describe('propwash-aware filter floor', () => {
     // Noise floor -25 dB: high but not extreme, target well above 100 Hz
     // Raw target: 75 + ((-25 - (-10)) / (-60)) * 225 = 75 + (15/60)*225 = 75 + 56.25 = 131 → 131 Hz
     // 131 >= 100 → propwash floor not triggered
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -25 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -686,7 +686,7 @@ describe('propwash-aware filter floor', () => {
   it('should not apply propwash floor to D-term LPF (only gyro)', () => {
     // Noise floor -16 dB triggers propwash floor for gyro
     // D-term target: 70 + (6/60)*130 = 70 + 13 = 83 Hz — should NOT be floored
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -16, pitchFloor: -16 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -6, pitchFloor: -6 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -721,7 +721,7 @@ describe('propwash-aware filter floor', () => {
 
   it('should remain convergent with propwash floor applied', () => {
     // First run: propwash floor clamps target to 100 Hz
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -16, pitchFloor: -16 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -6, pitchFloor: -6 });
     const initial: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -747,7 +747,7 @@ describe('propwash-aware filter floor', () => {
     // Noise floor exactly at bypass threshold: -15 dB
     // -15 <= -15 → floor SHOULD apply (boundary is inclusive)
     // Raw target: 75 + (5/60)*225 = 75 + 18.75 = 93.75 → 94 Hz (below 100)
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -15 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -5, pitchFloor: -5 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -763,7 +763,7 @@ describe('propwash-aware filter floor', () => {
 describe('LPF2 recommendations', () => {
   it('should recommend disabling gyro LPF2 when RPM active and noise is very clean', () => {
     // Noise floor < -45 dB (GYRO_LPF2_DISABLE_THRESHOLD_DB), RPM active, LPF2 enabled
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 250,
@@ -779,7 +779,7 @@ describe('LPF2 recommendations', () => {
 
   it('should recommend disabling dterm LPF2 when RPM active and noise is very clean', () => {
     // Noise floor < -45 dB, RPM active, dterm LPF2 enabled
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       dterm_lpf2_static_hz: 150,
@@ -795,7 +795,7 @@ describe('LPF2 recommendations', () => {
 
   it('should NOT disable dterm LPF2 at exactly the -45 dB threshold (strict <)', () => {
     // DTERM_LPF2_DISABLE_THRESHOLD_DB = -45: worstFloor must be strictly below
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -35, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       dterm_lpf2_static_hz: 150,
@@ -811,7 +811,7 @@ describe('LPF2 recommendations', () => {
 
   it('should recommend enabling gyro LPF2 when noise is high and no RPM', () => {
     // overallLevel='high', RPM off, gyro_lpf2_static_hz=0 → recommend 250
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 0,
@@ -827,7 +827,7 @@ describe('LPF2 recommendations', () => {
 
   it('should NOT recommend LPF2 changes when noise is moderate', () => {
     // overallLevel='medium' → no LPF2 recs (neither disable nor enable path triggers)
-    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -40, pitchFloor: -40 });
+    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -30, pitchFloor: -30 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 250,
@@ -844,7 +844,7 @@ describe('LPF2 recommendations', () => {
 
   it('should NOT recommend LPF2 disable when RPM is inactive even with clean noise', () => {
     // Noise floor < -45 dB but RPM off → disable path requires RPM active
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -55 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -45 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 250,
@@ -904,7 +904,7 @@ describe('Conditional dynamic notch Q with resonance', () => {
 
 describe('ruleId assignment', () => {
   it('should assign F-NF-H-GYRO and F-NF-H-DTERM for high noise', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 250,
@@ -916,7 +916,7 @@ describe('ruleId assignment', () => {
   });
 
   it('should assign F-NF-L-GYRO and F-NF-L-DTERM for low noise', () => {
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -65, pitchFloor: -60 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 150,
@@ -928,7 +928,7 @@ describe('ruleId assignment', () => {
   });
 
   it('should assign F-NF-M-GYRO and F-NF-M-DTERM for medium noise with far-off settings', () => {
-    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -50, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'medium', rollFloor: -40, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_static_hz: 100,
@@ -1043,7 +1043,7 @@ describe('ruleId assignment', () => {
   });
 
   it('should assign F-LPF2-DIS-GYRO when disabling LPF2 with RPM + clean noise', () => {
-    const noise = makeNoiseProfile({ level: 'low', rollFloor: -55, pitchFloor: -50 });
+    const noise = makeNoiseProfile({ level: 'low', rollFloor: -45, pitchFloor: -40 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 250,
@@ -1056,7 +1056,7 @@ describe('ruleId assignment', () => {
   });
 
   it('should assign F-LPF2-EN-GYRO when enabling LPF2 for high noise without RPM', () => {
-    const noise = makeNoiseProfile({ level: 'high', rollFloor: -25, pitchFloor: -20 });
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -15, pitchFloor: -10 });
     const current: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf2_static_hz: 0,
@@ -1072,8 +1072,8 @@ describe('ruleId assignment', () => {
     // High noise + resonance peak both target gyro_lpf1 → deduplicated
     const noise = makeNoiseProfile({
       level: 'high',
-      rollFloor: -25,
-      pitchFloor: -25,
+      rollFloor: -15,
+      pitchFloor: -15,
       rollPeaks: [{ frequency: 180, amplitude: 15, type: 'frame_resonance' }],
     });
     const current: CurrentFilterSettings = {
@@ -1401,7 +1401,7 @@ describe('dynamic lowpass ratio enforcement', () => {
   it('should maintain BF 2:1 ratio when gyroMaxHz clamps dyn_max', () => {
     // RPM-enabled quad with gyroMaxHz = 500. Target = 300 → dyn_max = 600 but clamped to 500.
     // Fix: dyn_min should be adjusted down to 250 so ratio is 500/250 = 2.0
-    const noisy = makeNoiseProfile({ level: 'high', rollFloor: -14, pitchFloor: -14 });
+    const noisy = makeNoiseProfile({ level: 'high', rollFloor: -4, pitchFloor: -4 });
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       gyro_lpf1_dyn_min_hz: 250,
@@ -1421,7 +1421,7 @@ describe('dynamic lowpass ratio enforcement', () => {
   });
 
   it('should maintain BF 2:1 ratio for D-term dynamic lowpass when clamped', () => {
-    const noisy = makeNoiseProfile({ level: 'high', rollFloor: -14, pitchFloor: -14 });
+    const noisy = makeNoiseProfile({ level: 'high', rollFloor: -4, pitchFloor: -4 });
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
       dterm_lpf1_dyn_min_hz: 100,
@@ -1524,8 +1524,8 @@ describe('variability-aware hysteresis', () => {
     // Noise that would produce a small recommendation change
     const noise = makeNoiseProfile({
       level: 'low',
-      rollFloor: -40,
-      pitchFloor: -40,
+      rollFloor: -30,
+      pitchFloor: -30,
     });
     // Settings close to the computed target — within normal deadzone + variability bonus
     const settings: CurrentFilterSettings = {
@@ -1565,8 +1565,8 @@ describe('variability-aware hysteresis', () => {
     // Even with max deadzone (5 + 15 = 20 Hz), 87 >> 20 → rec still produced.
     const noise = makeNoiseProfile({
       level: 'high',
-      rollFloor: -20,
-      pitchFloor: -20,
+      rollFloor: -10,
+      pitchFloor: -10,
     });
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
@@ -1583,8 +1583,8 @@ describe('variability-aware hysteresis', () => {
   it('has no effect when noiseFloorStdDb is 0', () => {
     const noise = makeNoiseProfile({
       level: 'high',
-      rollFloor: -20,
-      pitchFloor: -20,
+      rollFloor: -10,
+      pitchFloor: -10,
     });
     const settings: CurrentFilterSettings = {
       ...DEFAULT_FILTER_SETTINGS,
@@ -1599,5 +1599,80 @@ describe('variability-aware hysteresis', () => {
       expect(recsNoCtx[i].setting).toBe(recsZeroStd[i].setting);
       expect(recsNoCtx[i].recommendedValue).toBe(recsZeroStd[i].recommendedValue);
     }
+  });
+});
+
+describe('yaw-only resonance observation (F-YAW-RES)', () => {
+  it('emits an informational observation for a strong yaw-only peak outside notch range', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dyn_notch_count: 0, // notch disabled → nothing covers the yaw peak
+    };
+
+    const recs = recommend(noise, current);
+    const obs = recs.find((r) => r.ruleId === 'F-YAW-RES');
+    expect(obs).toBeDefined();
+    expect(obs!.informational).toBe(true);
+    expect(obs!.currentValue).toBe(obs!.recommendedValue);
+    expect(obs!.reason).toContain('130');
+  });
+
+  it('stays silent when the notch covers the yaw peak', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    // Default settings: notch enabled and 130 Hz within range
+    const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
+    expect(recs.find((r) => r.ruleId === 'F-YAW-RES')).toBeUndefined();
+  });
+
+  it('stays silent when the same peak also appears on roll (other rules act)', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 128, amplitude: 20, type: 'frame_resonance' }],
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dyn_notch_count: 0,
+    };
+
+    const recs = recommend(noise, current);
+    expect(recs.find((r) => r.ruleId === 'F-YAW-RES')).toBeUndefined();
+  });
+});
+
+describe('deduplication vs informational observations', () => {
+  it('F-YAW-RES no-op must not swallow an actionable F-DN-COUNT reduction', () => {
+    // RPM active on a 5" → F-DN-COUNT wants count 3→1; yaw-only peak outside
+    // notch range → F-YAW-RES emits an informational no-op on the same setting
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 700, amplitude: 15, type: 'electrical' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      rpm_filter_harmonics: 3,
+      dyn_notch_count: 3,
+      dyn_notch_max_hz: 600, // 700 Hz yaw peak is outside
+    };
+
+    const recs = recommend(noise, current, '5"');
+    const countRecs = recs.filter((r) => r.setting === 'dyn_notch_count');
+    const actionable = countRecs.find((r) => !r.informational);
+    const observation = countRecs.find((r) => r.informational);
+
+    // The actionable reduction must survive dedup with its own value/confidence
+    expect(actionable).toBeDefined();
+    expect(actionable!.recommendedValue).toBeLessThan(3);
+    // The informational observation passes through separately
+    expect(observation).toBeDefined();
+    expect(observation!.recommendedValue).toBe(observation!.currentValue);
+    expect(observation!.confidence).toBe('low');
   });
 });

@@ -194,6 +194,64 @@ describe('detectPeaks', () => {
     };
     expect(detectPeaks(spectrum).length).toBe(0);
   });
+
+  it('should detect a flat-topped (plateau) peak once, at its center', () => {
+    const spectrum = createSpectrum({ numBins: 512, freqResolution: 2, baselineDb: -60 });
+    // Plateau: bins 98-102 all at -40 (frequency 196-204 Hz, center 200 Hz)
+    for (let b = 98; b <= 102; b++) spectrum.magnitudes[b] = -40;
+
+    const peaks = detectPeaks(spectrum);
+    const near200 = peaks.filter((p) => Math.abs(p.frequency - 200) < 10);
+    expect(near200.length).toBe(1);
+    expect(near200[0].frequency).toBeCloseTo(200, 0);
+    expect(near200[0].amplitude).toBeCloseTo(20, 0);
+  });
+
+  it('should suppress weaker candidates within the minimum spacing', () => {
+    const spectrum = createSpectrum({ numBins: 512, freqResolution: 2, baselineDb: -60 });
+    // Broad hump: strong peak at 200 Hz plus a weaker shoulder 6 Hz away
+    spectrum.magnitudes[100] = -30; // 200 Hz
+    spectrum.magnitudes[99] = -38;
+    spectrum.magnitudes[101] = -38;
+    spectrum.magnitudes[103] = -36; // 206 Hz shoulder (local max)
+    spectrum.magnitudes[102] = -42;
+    spectrum.magnitudes[104] = -42;
+
+    const peaks = detectPeaks(spectrum);
+    const near = peaks.filter((p) => Math.abs(p.frequency - 203) < 12);
+    expect(near.length).toBe(1);
+    expect(near[0].frequency).toBeCloseTo(200, 0);
+  });
+
+  it('should keep separate peaks farther apart than the minimum spacing', () => {
+    const spectrum = createSpectrum({
+      numBins: 512,
+      freqResolution: 2,
+      baselineDb: -60,
+      peaks: [
+        { freqHz: 200, amplitudeDb: 20 },
+        { freqHz: 220, amplitudeDb: 15 }, // 20 Hz away — beyond 15 Hz spacing
+      ],
+    });
+
+    const peaks = detectPeaks(spectrum);
+    expect(peaks.some((p) => Math.abs(p.frequency - 200) < 5)).toBe(true);
+    expect(peaks.some((p) => Math.abs(p.frequency - 220) < 5)).toBe(true);
+  });
+
+  it('should interpolate sub-bin peak frequency (parabolic)', () => {
+    // Asymmetric neighbors → true peak sits between bins, toward the higher side
+    const spectrum = createSpectrum({ numBins: 512, freqResolution: 2, baselineDb: -60 });
+    spectrum.magnitudes[99] = -45; // 198 Hz
+    spectrum.magnitudes[100] = -30; // 200 Hz (max bin)
+    spectrum.magnitudes[101] = -35; // 202 Hz (higher than 198 → peak shifted right)
+
+    const peaks = detectPeaks(spectrum);
+    const peak = peaks.find((p) => Math.abs(p.frequency - 200) < 4)!;
+    expect(peak).toBeDefined();
+    expect(peak.frequency).toBeGreaterThan(200);
+    expect(peak.frequency).toBeLessThan(201);
+  });
 });
 
 describe('classifyPeak', () => {
@@ -219,6 +277,24 @@ describe('classifyPeak', () => {
   it('should classify non-pattern mid-range peaks as unknown', () => {
     const allPeaks = [{ frequency: 350 }];
     expect(classifyPeak(350, allPeaks)).toBe('unknown');
+  });
+
+  it('should use size-aware frame resonance bands', () => {
+    // 300 Hz: outside the 5" band (80-200) but inside the 2.5" band (150-350)
+    const allPeaks = [{ frequency: 300 }];
+    expect(classifyPeak(300, allPeaks)).toBe('unknown'); // 5" fallback
+    expect(classifyPeak(300, allPeaks, '2.5"')).toBe('frame_resonance');
+    expect(classifyPeak(300, allPeaks, '1"')).toBe('frame_resonance');
+
+    // 65 Hz: below the 5" band but inside the 7" band (60-150)
+    const lowPeaks = [{ frequency: 65 }];
+    expect(classifyPeak(65, lowPeaks)).toBe('unknown');
+    expect(classifyPeak(65, lowPeaks, '7"')).toBe('frame_resonance');
+
+    // 190 Hz: inside 5" band but above the 7" band (60-150)
+    const midPeaks = [{ frequency: 190 }];
+    expect(classifyPeak(190, midPeaks)).toBe('frame_resonance');
+    expect(classifyPeak(190, midPeaks, '7"')).toBe('unknown');
   });
 });
 
@@ -292,68 +368,68 @@ describe('analyzeAxisNoise', () => {
 });
 
 describe('categorizeNoiseLevel', () => {
-  it('should return "high" when noise floor >= -30 dB', () => {
-    const roll = makeAxisProfile(-20);
-    const pitch = makeAxisProfile(-25);
-    const yaw = makeAxisProfile(-15);
+  it('should return "high" when noise floor >= -20 dB', () => {
+    const roll = makeAxisProfile(-10);
+    const pitch = makeAxisProfile(-15);
+    const yaw = makeAxisProfile(-5);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high');
   });
 
-  it('should return "medium" when noise floor >= -50 dB and < -30 dB', () => {
-    const roll = makeAxisProfile(-40);
-    const pitch = makeAxisProfile(-45);
-    const yaw = makeAxisProfile(-10); // yaw ignored for level calc
+  it('should return "medium" when noise floor >= -40 dB and < -20 dB', () => {
+    const roll = makeAxisProfile(-30);
+    const pitch = makeAxisProfile(-35);
+    const yaw = makeAxisProfile(0); // yaw ignored for level calc
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium');
   });
 
-  it('should return "low" when noise floor < -50 dB', () => {
-    const roll = makeAxisProfile(-60);
-    const pitch = makeAxisProfile(-55);
-    const yaw = makeAxisProfile(-30);
+  it('should return "low" when noise floor < -40 dB', () => {
+    const roll = makeAxisProfile(-50);
+    const pitch = makeAxisProfile(-45);
+    const yaw = makeAxisProfile(-20);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('low');
   });
 
   it('should use worst of roll/pitch (not yaw)', () => {
-    const roll = makeAxisProfile(-60);
-    const pitch = makeAxisProfile(-25); // High noise
-    const yaw = makeAxisProfile(-60);
+    const roll = makeAxisProfile(-50);
+    const pitch = makeAxisProfile(-15); // High noise
+    const yaw = makeAxisProfile(-50);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high');
   });
 
   it('should use size-aware thresholds for 4" quad', () => {
-    // -26 dB on 5" = HIGH (> -30), on 4" also HIGH (> -27)
-    // -28 dB on 5" = HIGH (> -30), but on 4" = MEDIUM (threshold is -27)
-    const roll = makeAxisProfile(-28);
-    const pitch = makeAxisProfile(-28);
-    const yaw = makeAxisProfile(-20);
-    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // -28 > -30 → HIGH on 5"
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '4"')).toBe('medium'); // -28 < -27 → MEDIUM on 4"
-  });
-
-  it('should use size-aware thresholds for 7" quad', () => {
-    // -34 dB on 5" = MEDIUM, but on 7" = HIGH (threshold is -35)
-    const roll = makeAxisProfile(-34);
-    const pitch = makeAxisProfile(-34);
-    const yaw = makeAxisProfile(-30);
-    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium'); // 5" default
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '7"')).toBe('high'); // 7" threshold -35
-  });
-
-  it('should use size-aware thresholds for 1" whoop', () => {
-    // -18 dB on 5" = HIGH, but on 1" = MEDIUM (threshold is -15)
+    // -16 dB on 5" = HIGH (> -20), on 4" also HIGH (> -17)
+    // -18 dB on 5" = HIGH (> -20), but on 4" = MEDIUM (threshold is -17)
     const roll = makeAxisProfile(-18);
     const pitch = makeAxisProfile(-18);
     const yaw = makeAxisProfile(-10);
+    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // -18 > -20 → HIGH on 5"
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '4"')).toBe('medium'); // -18 < -17 → MEDIUM on 4"
+  });
+
+  it('should use size-aware thresholds for 7" quad', () => {
+    // -24 dB on 5" = MEDIUM, but on 7" = HIGH (threshold is -25)
+    const roll = makeAxisProfile(-24);
+    const pitch = makeAxisProfile(-24);
+    const yaw = makeAxisProfile(-20);
+    expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('medium'); // 5" default
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '7"')).toBe('high'); // 7" threshold -25
+  });
+
+  it('should use size-aware thresholds for 1" whoop', () => {
+    // -8 dB on 5" = HIGH, but on 1" = MEDIUM (threshold is -5)
+    const roll = makeAxisProfile(-8);
+    const pitch = makeAxisProfile(-8);
+    const yaw = makeAxisProfile(0);
     expect(categorizeNoiseLevel(roll, pitch, yaw)).toBe('high'); // 5" default
-    expect(categorizeNoiseLevel(roll, pitch, yaw, '1"')).toBe('medium'); // 1" threshold -15
+    expect(categorizeNoiseLevel(roll, pitch, yaw, '1"')).toBe('medium'); // 1" threshold -5
   });
 });
 
 describe('buildNoiseProfile', () => {
   it('should combine axis profiles into a noise profile', () => {
-    const roll = makeAxisProfile(-40);
-    const pitch = makeAxisProfile(-45);
-    const yaw = makeAxisProfile(-35);
+    const roll = makeAxisProfile(-30);
+    const pitch = makeAxisProfile(-35);
+    const yaw = makeAxisProfile(-25);
 
     const profile = buildNoiseProfile(roll, pitch, yaw);
     expect(profile.roll).toBe(roll);
@@ -363,28 +439,28 @@ describe('buildNoiseProfile', () => {
   });
 
   it('should classify exactly-on-boundary noise as the higher tier (inclusive)', () => {
-    // -30 dB is exactly highDb for 5" → should be 'high' (inclusive >=)
-    const exactHigh = makeAxisProfile(-30);
-    const quiet = makeAxisProfile(-60);
+    // -20 dB is exactly highDb for 5" → should be 'high' (inclusive >=)
+    const exactHigh = makeAxisProfile(-20);
+    const quiet = makeAxisProfile(-50);
     expect(buildNoiseProfile(exactHigh, quiet, quiet).overallLevel).toBe('high');
 
-    // -50 dB is exactly mediumDb for 5" → should be 'medium' (inclusive >=)
-    const exactMedium = makeAxisProfile(-50);
+    // -40 dB is exactly mediumDb for 5" → should be 'medium' (inclusive >=)
+    const exactMedium = makeAxisProfile(-40);
     expect(buildNoiseProfile(exactMedium, quiet, quiet).overallLevel).toBe('medium');
 
     // Below mediumDb → 'low'
-    const low = makeAxisProfile(-51);
+    const low = makeAxisProfile(-41);
     expect(buildNoiseProfile(low, quiet, quiet).overallLevel).toBe('low');
   });
 
   it('should pass droneSize through to categorization', () => {
-    const roll = makeAxisProfile(-28);
-    const pitch = makeAxisProfile(-28);
-    const yaw = makeAxisProfile(-20);
+    const roll = makeAxisProfile(-18);
+    const pitch = makeAxisProfile(-18);
+    const yaw = makeAxisProfile(-10);
 
     const profile5 = buildNoiseProfile(roll, pitch, yaw);
     const profile4 = buildNoiseProfile(roll, pitch, yaw, '4"');
-    expect(profile5.overallLevel).toBe('high'); // -28 >= -30 → HIGH on 5"
-    expect(profile4.overallLevel).toBe('medium'); // -28 < -27 → not high on 4", -28 >= -40 → MEDIUM
+    expect(profile5.overallLevel).toBe('high'); // -18 >= -20 → HIGH on 5"
+    expect(profile4.overallLevel).toBe('medium'); // -18 < -17 → not high on 4", -18 >= -30 → MEDIUM
   });
 });

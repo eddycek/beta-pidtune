@@ -30,6 +30,10 @@ export const THROTTLE_MAX_HOVER = 0.75;
 /** Maximum gyro standard deviation (deg/s) for a "steady" segment */
 export const GYRO_STEADY_MAX_STD = 50;
 
+/** Yaw steadiness threshold multiplier — yaw is inherently noisier than
+ * roll/pitch, but an active yaw spin still disqualifies a "steady" segment. */
+export const YAW_STEADY_MULTIPLIER = 1.5;
+
 /** Minimum segment duration in seconds */
 export const SEGMENT_MIN_DURATION_S = 0.5;
 
@@ -52,8 +56,28 @@ export const SWEEP_MAX_RESIDUAL = 0.15;
 
 // ---- Noise Analysis ----
 
-/** Peak detection: minimum prominence above local noise floor in dB */
+/**
+ * Spectrum scale version (re-exported from shared so metric summaries can
+ * stamp it at write time). v2 = calibrated one-sided power spectrum
+ * (detrended, Hanning, (Σw)² coherent-gain normalization, power-domain
+ * Welch averaging, dB = 10·log10). A sine of amplitude A reads
+ * 10·log10(A²/2). Absolute dB thresholds below are calibrated to this
+ * scale — they sit ≈10 dB above the legacy amplitude-averaged scale (v1),
+ * and ≈10 dB above the PIDToolBox amplitude-dB convention cited in older
+ * community sources. Stored metrics from v1 app versions are not directly
+ * comparable to v2 values.
+ */
+export { SPECTRUM_SCALE_VERSION } from '@shared/constants';
+
+/** Peak detection: minimum prominence above local noise floor in dB.
+ * Relative (peak vs floor) — identical meaning on the v1 and v2 scales. */
 export const PEAK_PROMINENCE_DB = 6;
+
+/** Peak detection: minimum spacing between reported peaks (Hz).
+ * A broad resonance hump spans several bins — without spacing enforcement
+ * it registers as multiple adjacent "peaks". Weaker candidates within this
+ * distance of a stronger peak are suppressed. */
+export const PEAK_MIN_SPACING_HZ = 15;
 
 /** Number of bins on each side for local noise floor estimation */
 export const PEAK_LOCAL_WINDOW_BINS = 50;
@@ -63,9 +87,10 @@ export const NOISE_FLOOR_PERCENTILE = 0.25;
 
 /** Noise level thresholds in dB (noise floor above these values).
  * These are the 5" defaults — use NOISE_LEVEL_BY_SIZE for size-aware classification.
- * Source: PIDToolBox community standard (-30 dB for "clean" 5" build). */
-export const NOISE_LEVEL_HIGH_DB = -30;
-export const NOISE_LEVEL_MEDIUM_DB = -50;
+ * Source: PIDToolBox community standard (-30 dB amplitude convention for a
+ * "clean" 5" build) shifted +10 dB to the v2 power-spectrum scale. */
+export const NOISE_LEVEL_HIGH_DB = -20;
+export const NOISE_LEVEL_MEDIUM_DB = -40;
 
 // ---- Size-Aware Noise Classification ----
 // Smaller quads with higher KV motors have inherently higher noise floors.
@@ -84,13 +109,14 @@ export interface NoiseLevelThresholds {
  * Higher KV motors excite the gyro more → higher noise floor is "normal".
  */
 export const NOISE_LEVEL_BY_SIZE: Record<DroneSize, NoiseLevelThresholds> = {
-  '1"': { highDb: -15, mediumDb: -30 }, // Extreme KV (19000+), budget gyros
-  '2.5"': { highDb: -20, mediumDb: -35 }, // High KV (4500+)
-  '3"': { highDb: -25, mediumDb: -40 }, // High KV (3000-4500)
-  '4"': { highDb: -27, mediumDb: -40 }, // Medium-high KV (2500-3500)
-  '5"': { highDb: -30, mediumDb: -50 }, // PIDToolBox standard
-  '6"': { highDb: -33, mediumDb: -50 }, // Lower KV, larger props
-  '7"': { highDb: -35, mediumDb: -55 }, // Lowest KV, should be very clean
+  // v2 power-spectrum scale (legacy amplitude-scale values +10 dB)
+  '1"': { highDb: -5, mediumDb: -20 }, // Extreme KV (19000+), budget gyros
+  '2.5"': { highDb: -10, mediumDb: -25 }, // High KV (4500+)
+  '3"': { highDb: -15, mediumDb: -30 }, // High KV (3000-4500)
+  '4"': { highDb: -17, mediumDb: -30 }, // Medium-high KV (2500-3500)
+  '5"': { highDb: -20, mediumDb: -40 }, // PIDToolBox standard (+10 dB)
+  '6"': { highDb: -23, mediumDb: -40 }, // Lower KV, larger props
+  '7"': { highDb: -25, mediumDb: -45 }, // Lowest KV, should be very clean
 };
 
 /** Fallback when drone size is unknown (= 5" standard) */
@@ -98,9 +124,32 @@ export const NOISE_LEVEL_DEFAULT: NoiseLevelThresholds = NOISE_LEVEL_BY_SIZE['5"
 
 // ---- Peak Classification Frequency Bands ----
 
-/** Frame resonance: typically 80-200 Hz */
+/** Frame resonance band for a 5" quad: typically 80-200 Hz.
+ * Fallback when drone size is unknown — use FRAME_RESONANCE_BY_SIZE otherwise. */
 export const FRAME_RESONANCE_MIN_HZ = 80;
 export const FRAME_RESONANCE_MAX_HZ = 200;
+
+/** Frame resonance band bounds per drone size (Hz). */
+export interface FrameResonanceBand {
+  min: number;
+  max: number;
+}
+
+/**
+ * Size-aware frame resonance bands. Smaller/stiffer/lighter frames resonate
+ * at higher frequencies than the classic 5" 80-200 Hz band — a 2.5" frame
+ * resonating at 300 Hz must not be classified as electrical noise.
+ * House extrapolation anchored on the 5" community convention.
+ */
+export const FRAME_RESONANCE_BY_SIZE: Record<DroneSize, FrameResonanceBand> = {
+  '1"': { min: 150, max: 350 },
+  '2.5"': { min: 150, max: 350 },
+  '3"': { min: 120, max: 280 },
+  '4"': { min: 100, max: 240 },
+  '5"': { min: 80, max: 200 },
+  '6"': { min: 70, max: 170 },
+  '7"': { min: 60, max: 150 },
+};
 
 /** Electrical noise: typically above 500 Hz */
 export const ELECTRICAL_NOISE_MIN_HZ = 500;
@@ -162,11 +211,13 @@ export const DYN_NOTCH_COUNT_WITHOUT_RPM = 3;
 /** Default dynamic notch Q without RPM filter */
 export const DYN_NOTCH_Q_WITHOUT_RPM = 300;
 
-/** dB level for extreme noise (maps to minimum cutoff in noise-based targeting) */
-export const NOISE_FLOOR_VERY_NOISY_DB = -10;
+/** dB level for extreme noise (maps to minimum cutoff in noise-based targeting).
+ * v2 power-spectrum scale. */
+export const NOISE_FLOOR_VERY_NOISY_DB = 0;
 
-/** dB level for very clean signal (maps to maximum cutoff in noise-based targeting) */
-export const NOISE_FLOOR_VERY_CLEAN_DB = -70;
+/** dB level for very clean signal (maps to maximum cutoff in noise-based targeting).
+ * v2 power-spectrum scale. */
+export const NOISE_FLOOR_VERY_CLEAN_DB = -60;
 
 /** Minimum difference to recommend a noise-based filter change (Hz) */
 export const NOISE_TARGET_DEADZONE_HZ = 5;
@@ -254,9 +305,10 @@ export const RESONANCE_CUTOFF_MARGIN_HZ = 20;
  * Only applies to noise-floor-based recommendations, not resonance-based. */
 export const PROPWASH_GYRO_LPF1_FLOOR_HZ = 100;
 
-/** Noise floor threshold (dB) above which the propwash floor is bypassed.
- * When noise is this severe, aggressive filtering takes priority over propwash handling. */
-export const PROPWASH_FLOOR_BYPASS_DB = -15;
+/** Noise floor threshold (dB, v2 power-spectrum scale) above which the propwash floor
+ * is bypassed. When noise is this severe, aggressive filtering takes priority over
+ * propwash handling. */
+export const PROPWASH_FLOOR_BYPASS_DB = -5;
 
 // ---- Step Detection ----
 
@@ -457,11 +509,12 @@ export const BANDWIDTH_LOW_HZ_BY_STYLE: Record<FlightStyle, number> = {
 
 // ---- LPF2 Recommendation Constants ----
 
-/** Gyro LPF2 can be disabled when RPM filter is active and noise is this clean (dB) */
-export const GYRO_LPF2_DISABLE_THRESHOLD_DB = -45;
+/** Gyro LPF2 can be disabled when RPM filter is active and noise is this clean
+ * (dB, v2 power-spectrum scale) */
+export const GYRO_LPF2_DISABLE_THRESHOLD_DB = -35;
 
-/** D-term LPF2 can be disabled when noise is this clean (dB) */
-export const DTERM_LPF2_DISABLE_THRESHOLD_DB = -45;
+/** D-term LPF2 can be disabled when noise is this clean (dB, v2 power-spectrum scale) */
+export const DTERM_LPF2_DISABLE_THRESHOLD_DB = -35;
 
 // ---- Prop Wash Detection ----
 

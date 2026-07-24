@@ -68,6 +68,10 @@ export interface FilterMetricsSummary {
   windDisturbance?: { level: string; worstVariance: number };
   /** Optional compact throttle spectrogram for heatmap rendering */
   throttleSpectrogram?: CompactThrottleSpectrogram;
+  /** Spectrum scale version the dB values were measured on (see
+   * SPECTRUM_SCALE_VERSION in shared/constants). Absent = legacy v1 scale
+   * (≈10 dB below v2) — not directly comparable to v2 records. */
+  spectrumScaleVersion?: number;
 }
 
 /** Compact per-axis PID step response metrics */
@@ -120,6 +124,9 @@ export interface AxisTransferFunctionSummary {
   overshootPercent: number;
   settlingTimeMs: number;
   riseTimeMs: number;
+  /** False when the gain never crossed 0 dB — phaseMarginDeg is the 90° cap,
+   * not a measured margin. Absent on records from older app versions. */
+  phaseMarginCrossingFound?: boolean;
 }
 
 /** Downsampled synthetic step response for history chart rendering */

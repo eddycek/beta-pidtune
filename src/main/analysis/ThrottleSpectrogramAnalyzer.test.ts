@@ -4,6 +4,7 @@ import {
   computeThrottleSpectrogram,
   DEFAULT_NUM_BANDS,
   MIN_SAMPLES_PER_BAND,
+  findContiguousRuns,
 } from './ThrottleSpectrogramAnalyzer';
 import type { BlackboxFlightData, TimeSeries } from '@shared/types/blackbox.types';
 
@@ -385,5 +386,110 @@ describe('ThrottleSpectrogramAnalyzer', () => {
       expect(result.bands[5].sampleCount).toBe(numSamples);
       expect(result.bands[5].spectra).toBeDefined();
     });
+  });
+});
+
+describe('findContiguousRuns', () => {
+  it('returns one run for fully contiguous indices', () => {
+    const indices = Array.from({ length: 600 }, (_, i) => 100 + i);
+    expect(findContiguousRuns(indices, 512)).toEqual([{ start: 100, end: 700 }]);
+  });
+
+  it('splits on gaps and drops short runs', () => {
+    // Run A: 0-599 (600 long), gap, run B: 1000-1299 (300 long — too short)
+    const indices = [
+      ...Array.from({ length: 600 }, (_, i) => i),
+      ...Array.from({ length: 300 }, (_, i) => 1000 + i),
+    ];
+    expect(findContiguousRuns(indices, 512)).toEqual([{ start: 0, end: 600 }]);
+  });
+
+  it('sorts runs longest first', () => {
+    const indices = [
+      ...Array.from({ length: 600 }, (_, i) => i),
+      ...Array.from({ length: 900 }, (_, i) => 2000 + i),
+    ];
+    expect(findContiguousRuns(indices, 512)).toEqual([
+      { start: 2000, end: 2900 },
+      { start: 0, end: 600 },
+    ]);
+  });
+
+  it('returns empty for empty input', () => {
+    expect(findContiguousRuns([], 512)).toEqual([]);
+  });
+});
+
+describe('contiguity-safe band spectra', () => {
+  it('excludes a band whose samples are only short non-contiguous chunks', () => {
+    // Throttle alternates every 100 samples between band 2 (~0.25) and
+    // band 7 (~0.75): both bands collect >512 total samples but no
+    // contiguous run reaches MIN_CONTIGUOUS_RUN.
+    const numSamples = 20000;
+    const time = new Float64Array(numSamples).map((_, i) => i / SAMPLE_RATE);
+    const throttleValues = new Float64Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      throttleValues[i] = Math.floor(i / 100) % 2 === 0 ? 0.25 : 0.75;
+    }
+    const gyro = makeSineSeries(150, 30, numSamples);
+    const zero = makeZeroSeries(numSamples);
+    const flightData: BlackboxFlightData = {
+      gyro: [gyro, gyro, gyro],
+      setpoint: [zero, zero, zero, { time, values: throttleValues }],
+      pidP: [zero, zero, zero],
+      pidI: [zero, zero, zero],
+      pidD: [zero, zero, zero],
+      pidF: [zero, zero, zero],
+      motor: [zero, zero, zero, zero],
+      debug: [],
+      sampleRateHz: SAMPLE_RATE,
+      durationSeconds: numSamples / SAMPLE_RATE,
+      frameCount: numSamples,
+    };
+
+    const result = computeThrottleSpectrogram(flightData);
+    const band2 = result.bands[2];
+    const band7 = result.bands[7];
+    expect(band2.sampleCount).toBeGreaterThan(MIN_SAMPLES_PER_BAND);
+    expect(band7.sampleCount).toBeGreaterThan(MIN_SAMPLES_PER_BAND);
+    // Chunks are 100 samples — below MIN_CONTIGUOUS_RUN → no FFT
+    expect(band2.spectra).toBeUndefined();
+    expect(band7.spectra).toBeUndefined();
+    expect(result.bandsWithData).toBe(0);
+  });
+
+  it('computes spectra from contiguous runs only', () => {
+    // First half in band 2, second half in band 7 — both fully contiguous
+    const numSamples = 20000;
+    const time = new Float64Array(numSamples).map((_, i) => i / SAMPLE_RATE);
+    const throttleValues = new Float64Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      throttleValues[i] = i < numSamples / 2 ? 0.25 : 0.75;
+    }
+    const gyro = makeSineSeries(150, 30, numSamples);
+    const zero = makeZeroSeries(numSamples);
+    const flightData: BlackboxFlightData = {
+      gyro: [gyro, gyro, gyro],
+      setpoint: [zero, zero, zero, { time, values: throttleValues }],
+      pidP: [zero, zero, zero],
+      pidI: [zero, zero, zero],
+      pidD: [zero, zero, zero],
+      pidF: [zero, zero, zero],
+      motor: [zero, zero, zero, zero],
+      debug: [],
+      sampleRateHz: SAMPLE_RATE,
+      durationSeconds: numSamples / SAMPLE_RATE,
+      frameCount: numSamples,
+    };
+
+    const result = computeThrottleSpectrogram(flightData);
+    expect(result.bandsWithData).toBe(2);
+    const spectrum = result.bands[2].spectra![0];
+    // The 150 Hz tone must be the dominant peak
+    let peakIdx = 0;
+    for (let i = 1; i < spectrum.magnitudes.length; i++) {
+      if (spectrum.magnitudes[i] > spectrum.magnitudes[peakIdx]) peakIdx = i;
+    }
+    expect(Math.abs(spectrum.frequencies[peakIdx] - 150)).toBeLessThan(5);
   });
 });

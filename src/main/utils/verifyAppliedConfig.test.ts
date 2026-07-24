@@ -312,21 +312,61 @@ describe('verifyAppliedConfig', () => {
       expect(result.actual.iterm_relax_cutoff).toBe(12);
     });
 
-    it('skips CLI-only FF settings without failing verification', async () => {
-      const msp = createFFMockMSPClient();
+    it('verifies advanced settings via the extended MSP_PID_ADVANCED read-back', async () => {
+      const msp = createFFMockMSPClient({
+        tpaRate: 55,
+        antiGravityGain: 110,
+        averaging: 2,
+        thrustLinear: 25,
+        vbatSagCompensation: 75,
+        dynIdleMinRpm: 30,
+      });
       const applied: AppliedChange[] = [
         { setting: 'tpa_rate', previousValue: 65, newValue: 55 },
         { setting: 'anti_gravity_gain', previousValue: 80, newValue: 110 },
         { setting: 'feedforward_averaging', previousValue: 0, newValue: 2 },
-        { setting: 'simplified_dmax_gain', previousValue: 37, newValue: 0 },
+        { setting: 'thrust_linear', previousValue: 0, newValue: 25 },
+        { setting: 'vbat_sag_compensation', previousValue: 0, newValue: 75 },
+        { setting: 'dyn_idle_min_rpm', previousValue: 0, newValue: 30 },
+        { setting: 'simplified_dmax_gain', previousValue: 37, newValue: 0 }, // genuinely CLI-only
       ];
 
       const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
 
       expect(result.verified).toBe(true);
       expect(result.mismatches).toHaveLength(0);
+      expect(result.actual.tpa_rate).toBe(55);
+      expect(result.actual.anti_gravity_gain).toBe(110);
+      expect(result.unchecked).not.toContain('tpa_rate');
+      expect(result.unchecked).not.toContain('simplified_dmax_gain');
+    });
+
+    it('reports mismatch when an advanced setting read-back differs', async () => {
+      const msp = createFFMockMSPClient({ tpaRate: 65 }); // Apply said 55, FC says 65
+      const applied: AppliedChange[] = [{ setting: 'tpa_rate', previousValue: 65, newValue: 55 }];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(false);
+      expect(result.mismatches.some((m) => m.includes('tpa_rate'))).toBe(true);
+    });
+
+    it('silently skips advanced settings on old firmware (short MSP layout)', async () => {
+      // Mock reports no tpaRate/antiGravityGain — API < 1.45 response.
+      // These must NOT fail verification (would fire false-positive auto
+      // diagnostic reports on every apply on BF 4.3/4.4).
+      const msp = createFFMockMSPClient();
+      const applied: AppliedChange[] = [
+        { setting: 'tpa_rate', previousValue: 65, newValue: 55 },
+        { setting: 'anti_gravity_gain', previousValue: 80, newValue: 110 },
+      ];
+
+      const result = await verifyAppliedConfig(msp, 'pid', undefined, undefined, applied);
+
+      expect(result.verified).toBe(true);
       expect(result.unchecked).not.toContain('tpa_rate');
       expect(result.unchecked).not.toContain('anti_gravity_gain');
+      expect(result.mismatches).toHaveLength(0);
     });
 
     it('marks unknown FF settings as unchecked (verified=false)', async () => {

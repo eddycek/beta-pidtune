@@ -61,6 +61,37 @@ export const RC_LINK_DEVIATION_THRESHOLD = 0.3;
 
 // ---- Implementation ----
 
+/** Fallback max stick rate (deg/s) when it cannot be derived from flight data.
+ * Matches the BF default rate profile's max rate. */
+export const MAX_STICK_RATE_FALLBACK = 670;
+
+/** Floor for the derived max stick rate — prevents a degenerate small/large
+ * split on very gentle flights where the sticks never moved far. */
+export const MAX_STICK_RATE_FLOOR = 300;
+
+/**
+ * Derive the maximum stick rate actually flown from the setpoint traces.
+ *
+ * More faithful than assuming the BF default rate profile: the small/large
+ * step split should be relative to what the pilot actually commanded in this
+ * log. Uses the max |setpoint| across roll/pitch/yaw, floored at
+ * MAX_STICK_RATE_FLOOR; falls back to MAX_STICK_RATE_FALLBACK with no data.
+ */
+export function deriveMaxStickRate(setpoint: Array<{ values: Float64Array }> | undefined): number {
+  if (!setpoint) return MAX_STICK_RATE_FALLBACK;
+  let max = 0;
+  for (let axis = 0; axis < 3 && axis < setpoint.length; axis++) {
+    const values = setpoint[axis]?.values;
+    if (!values) continue;
+    for (let i = 0; i < values.length; i++) {
+      const abs = Math.abs(values[i]);
+      if (abs > max) max = abs;
+    }
+  }
+  if (max <= 0) return MAX_STICK_RATE_FALLBACK;
+  return Math.max(max, MAX_STICK_RATE_FLOOR);
+}
+
 /**
  * Analyze feedforward characteristics from step response data.
  *
@@ -69,13 +100,13 @@ export const RC_LINK_DEVIATION_THRESHOLD = 0.3;
  *
  * @param responses - All step responses across axes (with leadingEdgeOvershootPercent populated)
  * @param ffContext - Current feedforward configuration from BBL headers
- * @param maxStickRate - Maximum stick rate in deg/s (default 670 for BF defaults)
+ * @param maxStickRate - Maximum stick rate in deg/s (derive with deriveMaxStickRate)
  * @returns FeedforwardAnalysis or undefined if not enough data
  */
 export function analyzeFeedforward(
   responses: StepResponse[],
   ffContext: FeedforwardContext | undefined,
-  maxStickRate: number = 670
+  maxStickRate: number = MAX_STICK_RATE_FALLBACK
 ): FeedforwardAnalysis | undefined {
   // Only analyze when FF is active
   if (!ffContext?.active) return undefined;

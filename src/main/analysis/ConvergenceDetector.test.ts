@@ -198,3 +198,59 @@ describe('detectFlashConvergence', () => {
     expect(result.status).toBe('converged');
   });
 });
+
+describe('spectrum scale version guard', () => {
+  const makeSummary = (floor: number, version?: number) => ({
+    noiseLevel: 'medium' as const,
+    roll: { noiseFloorDb: floor, peakCount: 0 },
+    pitch: { noiseFloorDb: floor, peakCount: 0 },
+    yaw: { noiseFloorDb: floor, peakCount: 0 },
+    segmentsUsed: 3,
+    summary: '',
+    ...(version !== undefined ? { spectrumScaleVersion: version } : {}),
+  });
+
+  it('does not report a phantom regression across scale versions', () => {
+    // v1 initial (-30 on old scale) vs v2 verification (-20 = same physical
+    // noise on the new scale) — would read as +10 dB "regression"
+    const result = detectFilterConvergence(makeSummary(-30), makeSummary(-20, 2));
+    expect(result.status).toBe('continue');
+    expect(result.improvementDelta).toBe(0);
+    expect(result.message).toContain('not directly comparable');
+  });
+
+  it('compares normally when both sides are on the same version', () => {
+    const result = detectFilterConvergence(makeSummary(-20, 2), makeSummary(-25, 2));
+    expect(result.message).not.toContain('not directly comparable');
+    expect(result.details.length).toBe(3);
+  });
+});
+
+describe('flash convergence phase-margin sentinel guard', () => {
+  const makeTF = (pm: number, crossingFound?: boolean) => {
+    const axis = {
+      bandwidthHz: 50,
+      phaseMarginDeg: pm,
+      gainMarginDb: 10,
+      overshootPercent: 10,
+      settlingTimeMs: 100,
+      riseTimeMs: 30,
+      ...(crossingFound !== undefined ? { phaseMarginCrossingFound: crossingFound } : {}),
+    };
+    return { roll: axis, pitch: axis, yaw: axis };
+  };
+
+  it('ignores the 90° placeholder when the crossing was not found', () => {
+    // initial measured 45°, verification capped 90° (no crossing) — the ±45°
+    // "delta" is an artifact and must not block convergence
+    const result = detectFlashConvergence(makeTF(45, true), makeTF(90, false));
+    expect(result.status).toBe('converged');
+    expect(result.details.some((d) => d.metric.includes('phase margin'))).toBe(false);
+  });
+
+  it('uses measured phase margins normally', () => {
+    const result = detectFlashConvergence(makeTF(45, true), makeTF(75, true));
+    expect(result.details.some((d) => d.metric.includes('phase margin'))).toBe(true);
+    expect(result.status).toBe('continue');
+  });
+});

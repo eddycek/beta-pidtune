@@ -159,7 +159,10 @@ describe('computeSegmentSpectrum', () => {
     }
     peaks.sort((a, b) => b.mag - a.mag);
 
-    const detectedFreqs = peaks.slice(0, 2).map((p) => frequencies[p.idx]).sort((a, b) => a - b);
+    const detectedFreqs = peaks
+      .slice(0, 2)
+      .map((p) => frequencies[p.idx])
+      .sort((a, b) => a - b);
     const freqRes = sampleRate / N;
     expect(Math.abs(detectedFreqs[0] - freq1)).toBeLessThan(freqRes * 1.5);
     expect(Math.abs(detectedFreqs[1] - freq2)).toBeLessThan(freqRes * 1.5);
@@ -322,6 +325,76 @@ describe('trimSpectrum', () => {
     for (let i = 1; i < trimmed.magnitudes.length; i++) {
       if (trimmed.magnitudes[i] > trimmed.magnitudes[peakIdx]) peakIdx = i;
     }
-    expect(Math.abs(trimmed.frequencies[peakIdx] - 300)).toBeLessThan(sampleRate / N * 2);
+    expect(Math.abs(trimmed.frequencies[peakIdx] - 300)).toBeLessThan((sampleRate / N) * 2);
+  });
+});
+
+describe('power spectrum calibration (v2 scale)', () => {
+  it('a sine of amplitude A reads 10*log10(A^2/2) at its bin', () => {
+    const N = 4096;
+    const sampleRate = 4000;
+    // Bin-aligned frequency to avoid leakage: bin 205 → 200.1953125 Hz
+    const freq = (205 * sampleRate) / N;
+    const A = 100;
+    const signal = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      signal[i] = A * Math.sin((2 * Math.PI * freq * i) / sampleRate);
+    }
+    const { frequencies, magnitudes } = computeSegmentSpectrum(signal, sampleRate);
+
+    let peakIdx = 0;
+    for (let i = 1; i < magnitudes.length; i++) {
+      if (magnitudes[i] > magnitudes[peakIdx]) peakIdx = i;
+    }
+    expect(Math.abs(frequencies[peakIdx] - freq)).toBeLessThan(sampleRate / N);
+    // Theoretical: 10*log10(100^2 / 2) = 36.99 dB
+    expect(magnitudes[peakIdx]).toBeCloseTo(10 * Math.log10((A * A) / 2), 0);
+  });
+
+  it('calibration is independent of window size and sample rate', () => {
+    const A = 50;
+    const expected = 10 * Math.log10((A * A) / 2);
+    for (const [N, fs] of [
+      [1024, 2000],
+      [4096, 4000],
+      [8192, 8000],
+    ] as const) {
+      const bin = Math.round(N / 16);
+      const freq = (bin * fs) / N;
+      const signal = new Float64Array(N);
+      for (let i = 0; i < N; i++) {
+        signal[i] = A * Math.sin((2 * Math.PI * freq * i) / fs);
+      }
+      const { magnitudes } = computeSegmentSpectrum(signal, fs);
+      let peak = -Infinity;
+      for (const m of magnitudes) peak = Math.max(peak, m);
+      expect(peak).toBeCloseTo(expected, 0);
+    }
+  });
+
+  it('Welch averaging preserves the calibrated sine level', () => {
+    const N = 1024;
+    const fs = 4000;
+    const A = 20;
+    const bin = 64;
+    const freq = (bin * fs) / N;
+    const signal = new Float64Array(N * 8);
+    for (let i = 0; i < signal.length; i++) {
+      signal[i] = A * Math.sin((2 * Math.PI * freq * i) / fs);
+    }
+    const { magnitudes } = computePowerSpectrum(signal, fs, N);
+    let peak = -Infinity;
+    for (const m of magnitudes) peak = Math.max(peak, m);
+    expect(peak).toBeCloseTo(10 * Math.log10((A * A) / 2), 0);
+  });
+
+  it('detrends the segment: a constant offset does not appear at DC', () => {
+    const N = 256;
+    const signal = new Float64Array(N).fill(42);
+    const { magnitudes } = computeSegmentSpectrum(signal, 1000, false);
+    // Mean removal leaves an all-zero signal → every bin at the sentinel floor
+    for (const m of magnitudes) {
+      expect(m).toBe(-240);
+    }
   });
 });

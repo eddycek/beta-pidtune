@@ -66,4 +66,20 @@ export interface FeedforwardConfiguration {
   itermRelaxType?: number;
   /** I-term relax cutoff frequency (Hz) */
   itermRelaxCutoff?: number;
+  /** FF averaging mode: 0=OFF, 2=2_POINT, 3=3_POINT, 4=4_POINT (API >= 1.44) */
+  averaging?: number;
+  /** Dynamic idle minimum RPM (in 100-RPM units) */
+  dynIdleMinRpm?: number;
+  /** VBat sag compensation strength (0-150) */
+  vbatSagCompensation?: number;
+  /** Thrust linearization (0-150) */
+  thrustLinear?: number;
+  /** Anti-gravity gain (BF 4.4+ 0-250 scale; only reported on API >= 1.45 layouts) */
+  antiGravityGain?: number;
+  /** TPA mode: 0=D-only, 1=PD (API >= 1.45) */
+  tpaMode?: number;
+  /** TPA rate (0-250, API >= 1.45) */
+  tpaRate?: number;
+  /** TPA breakpoint (throttle 750-2000, API >= 1.45) */
+  tpaBreakpoint?: number;
 }
