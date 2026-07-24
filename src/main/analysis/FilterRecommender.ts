@@ -41,6 +41,7 @@ import {
   MAX_VARIABILITY_BONUS_HZ,
   VARIABILITY_TO_HZ_SCALE,
 } from './constants';
+import { recommendRpmFilterTuning } from './RpmFilterRecommender';
 
 /** Optional noise variability context for hysteresis-aware deadzone */
 export interface ConfidenceContext {
@@ -93,15 +94,23 @@ export function recommend(
     recommendDynamicNotchForRPM(noise, current, recommendations, droneSize);
   }
 
-  // 5. Motor harmonic diagnostic (when RPM active but motor harmonics still detected)
+  // 5. RPM filter tuning rules (min_hz / harmonics / fade / weights) from
+  // measured harmonic tracks and the dynamic-idle floor
   if (rpmActive) {
+    recommendations.push(...recommendRpmFilterTuning(noise, current, droneSize));
+  }
+
+  // 6. Motor harmonic diagnostic (when RPM active but motor harmonics still detected).
+  // Skipped when a harmonic-count increase was recommended — the residual harmonic
+  // is explained by the missing notch order, not by motor_poles/telemetry issues.
+  if (rpmActive && !recommendations.some((r) => r.ruleId === 'F-RPM-HARM-UP')) {
     recommendMotorHarmonicDiagnostic(noise, recommendations);
   }
 
-  // 6. LPF2 recommendations (disable when clean + RPM, enable when noisy)
+  // 7. LPF2 recommendations (disable when clean + RPM, enable when noisy)
   recommendLpf2Adjustments(noise, current, recommendations, rpmActive);
 
-  // 7. Yaw-only resonance observation (informational — yaw never drives LPF cutoffs)
+  // 8. Yaw-only resonance observation (informational — yaw never drives LPF cutoffs)
   recommendYawResonanceObservation(noise, current, recommendations);
 
   // Deduplicate: if multiple rules recommend the same setting, keep the more aggressive one

@@ -814,6 +814,41 @@ export const RPM_FILTER_Q_BY_SIZE: Record<DroneSize, RpmFilterQRange> = {
 /** Deviation threshold (fraction) from size-appropriate Q to trigger recommendation */
 export const RPM_FILTER_Q_DEVIATION_THRESHOLD = 0.2; // 20%
 
+// ---- RPM Filter Tuning Rules (P2.6) ----
+// Source: docs/PID_TUNING_KNOWLEDGE.md Section 2 (RPM filter), measured harmonic
+// tracks from throttle-spectrogram reclassification (NoiseAnalyzer P2.2).
+
+/** Target rpm_filter_min_hz as a fraction of the dynamic-idle fundamental frequency.
+ * Notches never need to reach below the RPM floor dynamic idle enforces;
+ * a small margin below it covers transients. */
+export const RPM_MIN_HZ_IDLE_RATIO = 0.9;
+/** Same margin applied to the lowest measured fundamental-track frequency. */
+export const RPM_MIN_HZ_TRACK_RATIO = 0.9;
+/** House bounds for recommended rpm_filter_min_hz (firmware allows 30-200). */
+export const RPM_MIN_HZ_FLOOR = 40;
+export const RPM_MIN_HZ_CEILING = 150;
+/** Skip the min_hz recommendation when current is within this of the target. */
+export const RPM_MIN_HZ_DEADZONE_HZ = 15;
+/** Tolerance on measured-track frequency ratio when inferring harmonic order
+ * (|ratio − round(ratio)| must be below this to trust the order). */
+export const RPM_HARMONIC_RATIO_TOLERANCE = 0.25;
+/** Maximum rpm_filter_harmonics the harmonic-order rule will recommend. */
+export const RPM_HARMONICS_MAX = 3;
+/** BF default rpm_filter_fade_range_hz, recommended when fade is disabled. */
+export const RPM_FADE_RANGE_DEFAULT_HZ = 50;
+
+/** Community per-harmonic RPM notch weights by size (BF 4.5+ rpm_filter_weights).
+ * Second harmonic carries less energy for most props → dimmed to reduce delay. */
+export const RPM_FILTER_WEIGHTS_BY_SIZE: Record<DroneSize, [number, number, number]> = {
+  '1"': [100, 50, 100],
+  '2.5"': [100, 50, 100],
+  '3"': [100, 50, 100],
+  '4"': [100, 50, 100],
+  '5"': [90, 50, 90],
+  '6"': [90, 50, 90],
+  '7"': [90, 60, 90],
+};
+
 // ---- D-term LPF Dynamic Expo ----
 // Source: docs/PID_TUNING_KNOWLEDGE.md Section 10 (Karate Race presets)
 // Higher expo = LPF cutoff rises faster with throttle = less D filtering at high throttle.

@@ -634,6 +634,14 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 **Rule 5: Motor Harmonic Diagnostic** (when RPM filter active)
 - If motor harmonics still detected at ≥12 dB: emit warning about possible `motor_poles` misconfiguration or ESC telemetry issues
 
+**RPM Filter Tuning Rules (F-RPM-*)** — `RpmFilterRecommender`, only when RPM filter active:
+- **F-RPM-MIN-IDLE**: with dynamic idle active, the motor fundamental never drops below `idleHz = dyn_idle_min_rpm × 100 / 60`. Target `rpm_filter_min_hz = round(idleHz × 0.9)` clamped to 40-150 (`RPM_MIN_HZ_FLOOR/CEILING`), 15 Hz deadzone. Floor **above** idleHz → uncovered low-throttle gap → lower (medium confidence, noise). Floor **far below** → wasted deep notching → raise (low confidence, latency).
+- **F-RPM-MIN-TRACK**: without dynamic-idle info, a measured fundamental track (P2.2 `throttleTrack`) reaching below the current floor proves a coverage gap → lower to `round(minTracked × 0.9)`. Never raises from track data alone (the flight may not have visited low throttle). Medium confidence.
+- **F-RPM-HARM-UP**: a measured track at ~k× the fundamental (ratio within ±0.25 of an integer, `RPM_HARMONIC_RATIO_TOLERANCE`) with k > current `rpm_filter_harmonics` and amplitude ≥12 dB proves an unfiltered harmonic order → raise count to k (max 3). Medium confidence. Suppresses F-MOTOR-DIAG (the residual is explained by the missing notch order, not motor_poles/telemetry issues).
+- **F-RPM-FADE** (informational): `rpm_filter_fade_range_hz = 0` hard-stops notches at the floor → suggest the BF default 50.
+- **F-RPM-WEIGHTS** (informational, BF 4.5+): weights at full depth (100,100,100) → suggest size-appropriate community weights (table in Section 2); only fires when the BBL header reports `rpm_filter_weights` (proof of firmware support).
+- *Rationale*: min_hz/harmonics from **measured** idle floor and harmonic tracks instead of static defaults; latency-aware (never pushes notching below frequencies the motors can reach). Ratios 0.9/±0.25/deadzone 15 Hz are FPVPIDlab house values.
+
 **Rule 7: Yaw-Only Resonance Observation (F-YAW-RES)** — informational
 - Yaw is deliberately excluded from LPF cutoff decisions (inherently noisier; lowering a global LPF for a yaw-only peak taxes roll/pitch latency). But a yaw peak ≥12 dB that the dynamic notch does not cover and that has no roll/pitch counterpart (within 15 Hz) is surfaced as an informational observation — it often indicates a loose FC stack, uneven motor mounting, or yaw-axis frame flex.
 

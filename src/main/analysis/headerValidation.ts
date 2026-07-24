@@ -193,6 +193,39 @@ export function enrichSettingsFromBBLHeaders(
     }
   }
 
+  if (enriched.rpm_filter_fade_range_hz === undefined) {
+    const fadeStr = rawHeaders.get('rpm_filter_fade_range_hz');
+    if (fadeStr !== undefined) {
+      const fade = parseInt(fadeStr, 10);
+      if (!isNaN(fade)) {
+        enriched.rpm_filter_fade_range_hz = fade;
+        changed = true;
+      }
+    }
+  }
+
+  if (enriched.rpm_filter_weights === undefined) {
+    const weightsStr = rawHeaders.get('rpm_filter_weights');
+    if (weightsStr !== undefined) {
+      const weights = weightsStr.split(',').map((w) => parseInt(w.trim(), 10));
+      if (weights.length > 0 && weights.every((w) => !isNaN(w))) {
+        enriched.rpm_filter_weights = weights;
+        changed = true;
+      }
+    }
+  }
+
+  if (enriched.dyn_idle_min_rpm === undefined) {
+    const dynIdleStr = rawHeaders.get('dyn_idle_min_rpm');
+    if (dynIdleStr !== undefined) {
+      const dynIdle = parseInt(dynIdleStr, 10);
+      if (!isNaN(dynIdle)) {
+        enriched.dyn_idle_min_rpm = dynIdle;
+        changed = true;
+      }
+    }
+  }
+
   if (enriched.dterm_lpf1_dyn_expo === undefined) {
     const expoStr = rawHeaders.get('dterm_lpf1_dyn_expo');
     if (expoStr !== undefined) {

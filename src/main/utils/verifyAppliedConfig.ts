@@ -79,7 +79,7 @@ function buildActualPIDMap(config: PIDConfiguration): Record<string, number> {
 }
 
 /** Settings that can only be set via CLI and not read back via MSP */
-const CLI_ONLY_SETTINGS = new Set(['rpm_filter_q']);
+const CLI_ONLY_SETTINGS = new Set(['rpm_filter_q', 'rpm_filter_fade_range_hz']);
 
 /** Feedforward-stage settings readable via MSP_PID_ADVANCED → FeedforwardConfiguration key.
  * Fields that are optional in FeedforwardConfiguration (absent on short/old-firmware
@@ -134,6 +134,13 @@ function buildExpectedFilterMap(
   if (currentConfig.dyn_notch_count !== undefined) {
     map.dyn_notch_count = currentConfig.dyn_notch_count;
   }
+  // RPM filter fields (MSP_FILTER_CONFIG offsets 43/44)
+  if (currentConfig.rpm_filter_harmonics !== undefined) {
+    map.rpm_filter_harmonics = currentConfig.rpm_filter_harmonics;
+  }
+  if (currentConfig.rpm_filter_min_hz !== undefined) {
+    map.rpm_filter_min_hz = currentConfig.rpm_filter_min_hz;
+  }
   // Dynamic lowpass fields (now read from MSP)
   if (currentConfig.gyro_lpf1_dyn_min_hz !== undefined) {
     map.gyro_lpf1_dyn_min_hz = currentConfig.gyro_lpf1_dyn_min_hz;
@@ -174,6 +181,12 @@ function buildActualFilterMap(config: CurrentFilterSettings): Record<string, num
   }
   if (config.dyn_notch_count !== undefined) {
     map.dyn_notch_count = config.dyn_notch_count;
+  }
+  if (config.rpm_filter_harmonics !== undefined) {
+    map.rpm_filter_harmonics = config.rpm_filter_harmonics;
+  }
+  if (config.rpm_filter_min_hz !== undefined) {
+    map.rpm_filter_min_hz = config.rpm_filter_min_hz;
   }
   if (config.gyro_lpf1_dyn_min_hz !== undefined) {
     map.gyro_lpf1_dyn_min_hz = config.gyro_lpf1_dyn_min_hz;

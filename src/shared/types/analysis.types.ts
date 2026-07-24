@@ -329,6 +329,12 @@ export interface CurrentFilterSettings {
   dyn_notch_q?: number;
   /** RPM filter Q (notch bandwidth). Undefined if not read. */
   rpm_filter_q?: number;
+  /** RPM filter fade range in Hz below min_hz where notches fade out (CLI-only, BBL header). */
+  rpm_filter_fade_range_hz?: number;
+  /** Per-harmonic RPM notch weights in percent, e.g. [100, 50, 100] (BF 4.5+, BBL header). */
+  rpm_filter_weights?: number[];
+  /** Dynamic idle minimum RPM in hundreds (value × 100 = RPM; 0 = disabled). From BBL header. */
+  dyn_idle_min_rpm?: number;
 
   /** Gyro LPF1 dynamic minimum Hz (>0 means dynamic gyro LPF is active) */
   gyro_lpf1_dyn_min_hz?: number;

@@ -55,6 +55,14 @@
       "recommendedValue": 850,
       "ruleId": "F-RPM-Q",
       "confidence": "low"
+    },
+    {
+      "setting": "rpm_filter_weights",
+      "currentValue": 100,
+      "recommendedValue": 50,
+      "ruleId": "F-RPM-WEIGHTS",
+      "confidence": "low",
+      "informational": true
     }
   ]
 }

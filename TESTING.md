@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3260 unit tests across 148 files (3237 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3278 unit tests across 149 files (3255 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -365,6 +365,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/FilterAnalyzer.test.ts` | 20 | End-to-end pipeline, progress reporting, segment fallback warnings, RPM context propagation, data quality scoring, throttle spectrogram, group delay |
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 23 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking, contiguous-run gating (findContiguousRuns, min 512 samples, length-weighted power average) |
 | `analysis/GroupDelayEstimator.test.ts` | 28 | Group delay estimation, filter phase response, latency measurement, analytic PT1/notch anchors (denominator-only notch formula), LPF2 modeled as PT1 (BF 4.3+ default) |
+| `analysis/RpmFilterRecommender.test.ts` | 18 | RPM filter tuning rules: min_hz from dynamic-idle floor (gap/waste directions, deadzone, clamping), min_hz from measured fundamental track (lower-only), harmonic-count increase from integer-ratio tracks (tolerance, amplitude threshold, max cap), fade-range and weights advisories, cross-axis dedup |
 
 ### Step Response Analysis
 
