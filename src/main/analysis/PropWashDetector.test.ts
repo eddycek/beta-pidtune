@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectThrottleDrops, analyzePropWash } from './PropWashDetector';
+import { detectThrottleDrops, analyzePropWash, computeCleanRuns } from './PropWashDetector';
 import type { BlackboxFlightData, TimeSeries } from '@shared/types/blackbox.types';
 
 const SAMPLE_RATE = 4000;
@@ -399,5 +399,70 @@ describe('PropWashDetector', () => {
         expect(result.events.length).toBeGreaterThanOrEqual(1);
       }
     });
+  });
+});
+
+describe('computeCleanRuns', () => {
+  it('returns the whole flight as one run when there are no drops', () => {
+    expect(computeCleanRuns(10000, [], 1600)).toEqual([{ start: 0, end: 10000 }]);
+  });
+
+  it('excludes drop + post-drop window from clean runs', () => {
+    const runs = computeCleanRuns(10000, [{ startIndex: 4000, endIndex: 4200 }], 1600);
+    expect(runs).toEqual([
+      { start: 0, end: 4000 },
+      { start: 5800, end: 10000 },
+    ]);
+  });
+
+  it('merges overlapping exclusion ranges', () => {
+    const runs = computeCleanRuns(
+      20000,
+      [
+        { startIndex: 4000, endIndex: 4200 },
+        { startIndex: 5000, endIndex: 5200 }, // post-window of first overlaps
+      ],
+      1600
+    );
+    expect(runs).toEqual([
+      { start: 0, end: 4000 },
+      { start: 6800, end: 20000 },
+    ]);
+  });
+
+  it('drops runs shorter than the minimum FFT length', () => {
+    const runs = computeCleanRuns(3000, [{ startIndex: 500, endIndex: 2900 }], 1600);
+    // Leading run 0-500 too short, trailing run fully consumed by window
+    expect(runs).toEqual([]);
+  });
+
+  it('clean baseline discriminates strong vs weak oscillation (severity not saturated)', () => {
+    const numSamples = 20000;
+    const throttleFn = (i: number) => {
+      const t = i / SAMPLE_RATE;
+      if (t >= 1.0 && t < 1.05) return 0.7 - ((t - 1.0) / 0.05) * 0.5;
+      if (t >= 1.05 && t < 2.0) return 0.2;
+      if (t >= 3.0 && t < 3.05) return 0.7 - ((t - 3.0) / 0.05) * 0.5;
+      if (t >= 3.05 && t < 4.0) return 0.2;
+      return 0.7;
+    };
+    // Deterministic background (30 Hz in-band tone) + post-drop oscillation
+    const makeGyro = (oscAmp: number) => (i: number) => {
+      const t = i / SAMPLE_RATE;
+      let v = 0.5 * Math.sin(2 * Math.PI * 30 * t);
+      if ((t >= 1.05 && t < 1.45) || (t >= 3.05 && t < 3.45)) {
+        v += oscAmp * Math.sin(2 * Math.PI * 50 * t);
+      }
+      return v;
+    };
+    const strong = analyzePropWash(
+      createFlightData({ numSamples, throttleFn, gyroFn: makeGyro(100) })
+    );
+    const weak = analyzePropWash(createFlightData({ numSamples, throttleFn, gyroFn: makeGyro(2) }));
+    expect(strong).toBeDefined();
+    expect(weak).toBeDefined();
+    // With a clean baseline the ratio scales with oscillation energy —
+    // the whole-flight baseline used to saturate both at the same value.
+    expect(strong!.meanSeverity).toBeGreaterThan(10 * weak!.meanSeverity);
   });
 });
