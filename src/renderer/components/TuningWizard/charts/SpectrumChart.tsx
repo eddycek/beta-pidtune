@@ -13,7 +13,12 @@ import {
 import { AxisTabs, type AxisSelection } from './AxisTabs';
 import { spectrumToRechartsData, downsampleData, AXIS_COLORS, type Axis } from './chartUtils';
 import { computeFilterChainCurve, FILTER_RESPONSE_FLOOR_DB } from '@shared/utils/filterResponse';
-import type { NoiseProfile, NoisePeak, CurrentFilterSettings } from '@shared/types/analysis.types';
+import type {
+  NoiseProfile,
+  NoisePeak,
+  CurrentFilterSettings,
+  FilterRecommendation,
+} from '@shared/types/analysis.types';
 import './SpectrumChart.css';
 
 interface SpectrumChartProps {
@@ -21,7 +26,13 @@ interface SpectrumChartProps {
   /** When provided, the configured gyro/D-term filter response is overlaid
    * (right axis, attenuation dB) together with the dynamic notch range. */
   filterSettings?: CurrentFilterSettings;
+  /** When provided, peaks that triggered a rule (via evidence.anchorFrequencyHz)
+   * are tagged with the rule ID — "this peak fired F-RES-GYRO" (P3.1) */
+  recommendations?: FilterRecommendation[];
 }
+
+/** Frequency tolerance when matching a rule's evidence anchor to a peak */
+const RULE_ANCHOR_TOLERANCE_HZ = 8;
 
 const FILTER_CURVE_COLORS = { gyro: '#63e6be', dterm: '#e599f7' } as const;
 
@@ -51,7 +62,7 @@ const DB_TOP_PADDING = 5;
 /** Padding beyond the last significant frequency as fraction of visible range */
 const FREQ_PADDING_RATIO = 0.05;
 
-export function SpectrumChart({ noise, filterSettings }: SpectrumChartProps) {
+export function SpectrumChart({ noise, filterSettings, recommendations }: SpectrumChartProps) {
   const [selectedAxis, setSelectedAxis] = useState<AxisSelection>('all');
 
   // Compute data, domains, and filter to significant range in one pass
@@ -129,6 +140,16 @@ export function SpectrumChart({ noise, filterSettings }: SpectrumChartProps) {
   }, [data, filterSettings]);
 
   const visibleAxes: Axis[] = selectedAxis === 'all' ? ['roll', 'pitch', 'yaw'] : [selectedAxis];
+
+  // Map rule anchors (evidence.anchorFrequencyHz) to peak frequencies so each
+  // annotated peak shows WHICH rule it triggered
+  const ruleForFrequency = (freq: number): string | undefined =>
+    recommendations?.find(
+      (r) =>
+        r.ruleId &&
+        r.evidence?.anchorFrequencyHz !== undefined &&
+        Math.abs(r.evidence.anchorFrequencyHz - freq) <= RULE_ANCHOR_TOLERANCE_HZ
+    )?.ruleId;
 
   // Collect peaks for visible axes
   const visiblePeaks: (NoisePeak & { axis: Axis })[] = [];
@@ -283,22 +304,26 @@ export function SpectrumChart({ noise, filterSettings }: SpectrumChartProps) {
               />
             ))}
 
-            {/* Peak markers as vertical reference lines */}
-            {visiblePeaks.map((peak, i) => (
-              <ReferenceLine
-                key={`peak-${peak.axis}-${i}`}
-                yAxisId="noise"
-                x={peak.frequency}
-                stroke={PEAK_COLORS[peak.type] || '#aaa'}
-                strokeDasharray="3 3"
-                strokeOpacity={0.6}
-                label={{
-                  value: `${PEAK_LABELS[peak.type] || peak.type} ${peak.frequency.toFixed(0)}Hz`,
-                  position: 'top',
-                  style: { fontSize: 9, fill: PEAK_COLORS[peak.type] || '#aaa' },
-                }}
-              />
-            ))}
+            {/* Peak markers as vertical reference lines (tagged with the rule they fired) */}
+            {visiblePeaks.map((peak, i) => {
+              const ruleId = ruleForFrequency(peak.frequency);
+              const baseLabel = `${PEAK_LABELS[peak.type] || peak.type} ${peak.frequency.toFixed(0)}Hz`;
+              return (
+                <ReferenceLine
+                  key={`peak-${peak.axis}-${i}`}
+                  yAxisId="noise"
+                  x={peak.frequency}
+                  stroke={PEAK_COLORS[peak.type] || '#aaa'}
+                  strokeDasharray="3 3"
+                  strokeOpacity={0.6}
+                  label={{
+                    value: ruleId ? `${baseLabel} → ${ruleId}` : baseLabel,
+                    position: 'top',
+                    style: { fontSize: 9, fill: PEAK_COLORS[peak.type] || '#aaa' },
+                  }}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       </div>

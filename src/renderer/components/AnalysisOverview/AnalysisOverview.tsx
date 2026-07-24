@@ -331,6 +331,7 @@ export function AnalysisOverview({ logId, logName, onExit }: AnalysisOverviewPro
             <SpectrumChart
               noise={overview.filterResult.noise}
               filterSettings={overview.filterResult.filterSettings}
+              recommendations={overview.filterResult.recommendations}
             />
             <div className="axis-summary">
               {(['roll', 'pitch', 'yaw'] as const).map((axis) => {

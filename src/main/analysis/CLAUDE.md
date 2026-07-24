@@ -51,6 +51,10 @@ Noise analysis, step response, transfer function, and data quality scoring modul
 - Used in Flash Tune mode for combined filter + PID analysis from a single flight
 - IPC: `ANALYSIS_RUN_TRANSFER_FUNCTION` + `EVENT_ANALYSIS_PROGRESS`
 
+## Explainable Recommendations (P3.1)
+
+`RecommendationEvidence` (shared types) — optional `evidence` on FilterRecommendation and PIDRecommendation: `measurements` (label/value pairs), `trigger` (the fired condition), `anchorFrequencyHz` (spectrum-chart anchor). Populated by the noise-floor rules (measured per-axis floors + computed target + deadzone), resonance rules (peak freq/amplitude/type, anchored), F-DN-MIN, F-YAW-RES, RPM rules (idle floor / tracked fundamental / harmonic ratio, anchored), and TPA-TF rules (per-band overshoot trend). Renderer: RecommendationCard shows a "Why?" block; SpectrumChart tags anchored peaks with their ruleId; BodePlot plots per-bin coherence γ² with the 0.5 gate line.
+
 ## Data Quality Scoring (`DataQualityScorer.ts`)
 
 Rates flight data quality 0-100 before generating recommendations. Integrated into both FilterAnalyzer and PIDAnalyzer.

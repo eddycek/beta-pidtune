@@ -325,6 +325,19 @@ export function recommendTPAFromThrottleTF(
         impact: 'stability',
         confidence: 'medium',
         ruleId: 'TPA-TF-RATE-UP',
+        evidence: {
+          measurements: [
+            {
+              label: `Low-throttle ${driving.label} overshoot`,
+              value: `${driving.low.toFixed(0)}%`,
+            },
+            {
+              label: `High-throttle ${driving.label} overshoot`,
+              value: `${driving.high.toFixed(0)}%`,
+            },
+          ],
+          trigger: `Overshoot grows ≥ ${TPA_TF_OVERSHOOT_DELTA_PP} pp from low- to high-throttle TF bands`,
+        },
       });
     }
 
@@ -344,6 +357,16 @@ export function recommendTPAFromThrottleTF(
           impact: 'stability',
           confidence: 'medium',
           ruleId: 'TPA-TF-BREAKPOINT',
+          evidence: {
+            measurements: [
+              {
+                label: 'Measured oscillation onset',
+                value: `~${Math.round((driving.onset ?? 0) * 100)}% throttle`,
+              },
+              { label: 'Current breakpoint', value: `${tpaContext.breakpoint}` },
+            ],
+            trigger: 'Overshoot exceeds the low-band mean before TPA starts attenuating',
+          },
         });
       }
     }
@@ -366,6 +389,19 @@ export function recommendTPAFromThrottleTF(
         impact: 'response',
         confidence: 'low',
         ruleId: 'TPA-TF-RATE-DOWN',
+        evidence: {
+          measurements: [
+            {
+              label: `Low-throttle ${driving.label} overshoot`,
+              value: `${driving.low.toFixed(0)}%`,
+            },
+            {
+              label: `High-throttle ${driving.label} overshoot`,
+              value: `${driving.high.toFixed(0)}%`,
+            },
+          ],
+          trigger: `High-throttle bands overdamped (< ${TPA_TF_OVERDAMPED_OVERSHOOT_PCT}% overshoot) while low bands overshoot`,
+        },
       });
     }
   }

@@ -179,3 +179,52 @@ describe('SpectrumChart', () => {
     expect(screen.getByText(/Gyro filters/)).toBeInTheDocument();
   });
 });
+
+describe('SpectrumChart rule annotations (P3.1)', () => {
+  it('tags peaks with the rule they triggered via evidence anchors', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        recommendations={[
+          {
+            setting: 'gyro_lpf1_static_hz',
+            currentValue: 250,
+            recommendedValue: 130,
+            reason: 'Resonance detected',
+            impact: 'both',
+            confidence: 'high',
+            ruleId: 'F-RES-GYRO',
+            evidence: {
+              measurements: [{ label: 'Peak frequency', value: '150 Hz' }],
+              anchorFrequencyHz: 150,
+            },
+          },
+        ]}
+      />
+    );
+
+    expect(container.textContent).toContain('F-RES-GYRO');
+  });
+
+  it('leaves peaks untagged when no evidence anchor matches', () => {
+    const { container } = render(
+      <SpectrumChart
+        noise={mockNoise}
+        recommendations={[
+          {
+            setting: 'gyro_lpf1_static_hz',
+            currentValue: 250,
+            recommendedValue: 130,
+            reason: 'Noise floor',
+            impact: 'both',
+            confidence: 'high',
+            ruleId: 'F-NF-H-GYRO',
+            evidence: { measurements: [] },
+          },
+        ]}
+      />
+    );
+
+    expect(container.textContent).not.toContain('F-NF-H-GYRO');
+  });
+});

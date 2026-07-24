@@ -50,6 +50,18 @@ export interface NoiseProfile {
   overallLevel: 'low' | 'medium' | 'high';
 }
 
+/** Structured evidence explaining WHY a recommendation fired (P3.1).
+ * Rendered as a "Why?" block on recommendation cards and used to annotate
+ * charts (e.g. tagging the spectrum peak that triggered a resonance rule). */
+export interface RecommendationEvidence {
+  /** Measured quantities that triggered the rule (pre-formatted values) */
+  measurements: { label: string; value: string }[];
+  /** The rule condition that fired, human-readable */
+  trigger?: string;
+  /** Spectrum-chart anchor: frequency of the peak this rule acted on */
+  anchorFrequencyHz?: number;
+}
+
 /** A single filter recommendation */
 export interface FilterRecommendation {
   /** Betaflight CLI setting name (e.g. "gyro_lpf1_static_hz") */
@@ -68,6 +80,8 @@ export interface FilterRecommendation {
   ruleId?: string;
   /** When true, this recommendation is advisory-only (informational, not auto-applied) */
   informational?: boolean;
+  /** Structured evidence explaining why the rule fired (P3.1) */
+  evidence?: RecommendationEvidence;
 }
 
 /** Data quality score for analysis input data */
@@ -552,6 +566,8 @@ export interface PIDRecommendation {
   informational?: boolean;
   /** Structured rule identifier for telemetry tracking (e.g. "P-OS-D-roll") */
   ruleId?: string;
+  /** Structured evidence explaining why the rule fired (P3.1) */
+  evidence?: RecommendationEvidence;
 }
 
 /** Bayesian optimizer suggestion for next PID gains to try */
@@ -667,16 +683,22 @@ export interface PIDAnalysisResult {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
     pitch: {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
     yaw: {
       frequencies: Float64Array | number[];
       magnitude: Float64Array | number[];
       phase: Float64Array | number[];
+      /** Magnitude-squared coherence γ²(f), 0-1 per bin (absent with a single Welch window) */
+      coherence?: Float64Array | number[];
     };
   };
   /** Per-axis transfer function metrics (only present for Wiener deconvolution analysis) */

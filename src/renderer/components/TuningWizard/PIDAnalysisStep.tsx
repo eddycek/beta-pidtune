@@ -239,6 +239,7 @@ export function PIDAnalysisStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
               />
             ))}
           </div>

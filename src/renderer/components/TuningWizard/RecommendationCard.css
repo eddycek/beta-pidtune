@@ -114,3 +114,31 @@
   color: var(--primary-color, #4dabf7);
   text-transform: lowercase;
 }
+
+.recommendation-card-evidence {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+}
+
+.recommendation-card-evidence summary {
+  cursor: pointer;
+  color: var(--text-secondary, #8ab4f8);
+  font-size: 11px;
+  user-select: none;
+}
+
+.recommendation-card-evidence ul {
+  margin: 6px 0 4px;
+  padding-left: 18px;
+}
+
+.recommendation-card-evidence-label {
+  color: var(--text-primary, #ddd);
+}
+
+.recommendation-card-evidence-trigger {
+  margin: 4px 0 0;
+  font-style: italic;
+  font-size: 11px;
+}

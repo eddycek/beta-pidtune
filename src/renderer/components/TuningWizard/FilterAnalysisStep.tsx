@@ -197,7 +197,11 @@ export function FilterAnalysisStep({
               Peak marker
             </span>
           </p>
-          <SpectrumChart noise={filterResult.noise} filterSettings={filterResult.filterSettings} />
+          <SpectrumChart
+            noise={filterResult.noise}
+            filterSettings={filterResult.filterSettings}
+            recommendations={filterResult.recommendations}
+          />
           <div className="axis-summary">
             {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
               const profile = filterResult.noise[axis];
@@ -252,6 +256,7 @@ export function FilterAnalysisStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
                 unit="Hz"
               />
             ))}

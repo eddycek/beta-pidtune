@@ -10,6 +10,7 @@ import type {
   CurrentFilterSettings,
   NoisePeak,
   FilterGroupDelay,
+  RecommendationEvidence,
 } from '@shared/types/analysis.types';
 import { DEFAULT_FILTER_SETTINGS } from '@shared/types/analysis.types';
 import type { DroneSize, FlightStyle } from '@shared/types/profile.types';
@@ -166,6 +167,15 @@ function recommendYawResonanceObservation(
       'inspect hardware, or extend the dynamic notch range to cover it.',
     impact: 'noise',
     confidence: 'low',
+    evidence: {
+      measurements: [
+        { label: 'Yaw peak frequency', value: `${Math.round(strongest.frequency)} Hz` },
+        { label: 'Amplitude', value: `${Math.round(strongest.amplitude)} dB above floor` },
+      ],
+      trigger:
+        'Yaw-only peak ≥ 12 dB with no roll/pitch counterpart within 15 Hz, outside the dynamic notch range',
+      anchorFrequencyHz: strongest.frequency,
+    },
     informational: true,
     ruleId: 'F-YAW-RES',
   });
@@ -253,6 +263,19 @@ function recommendNoiseFloorAdjustments(
     ? (current.dterm_lpf1_dyn_min_hz ?? current.dterm_lpf1_static_hz)
     : current.dterm_lpf1_static_hz;
 
+  // Structured evidence shared by the noise-floor rules (P3.1)
+  const noiseFloorEvidence = (target: number): RecommendationEvidence => ({
+    measurements: [
+      { label: 'Roll noise floor', value: `${noise.roll.noiseFloorDb.toFixed(1)} dB` },
+      { label: 'Pitch noise floor', value: `${noise.pitch.noiseFloorDb.toFixed(1)} dB` },
+      { label: 'Computed target cutoff', value: `${target} Hz` },
+    ],
+    trigger:
+      `Worst roll/pitch noise floor ${worstFloor.toFixed(1)} dB maps to a ${target} Hz target ` +
+      `(scale: ${NOISE_FLOOR_VERY_NOISY_DB} dB → tightest, ${NOISE_FLOOR_VERY_CLEAN_DB} dB → most open); ` +
+      `current cutoff differs by more than the ${Math.round(baseDeadzone)} Hz deadzone`,
+  });
+
   // Helper: push gyro LPF1 recommendation (static or dynamic mode)
   const pushGyroRec = (
     target: number,
@@ -261,6 +284,7 @@ function recommendNoiseFloorAdjustments(
     confidence: FilterRecommendation['confidence'],
     ruleId: string
   ) => {
+    const evidence = noiseFloorEvidence(target);
     if (gyroLpfDisabled) return;
     if (gyroDynActive) {
       // Dynamic mode: tune dyn_min_hz, use BF 2:1 ratio for dyn_max_hz
@@ -282,6 +306,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
         out.push({
           setting: 'gyro_lpf1_dyn_max_hz',
@@ -316,6 +341,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
       }
     }
@@ -329,6 +355,7 @@ function recommendNoiseFloorAdjustments(
     confidence: FilterRecommendation['confidence'],
     ruleId: string
   ) => {
+    const evidence = noiseFloorEvidence(target);
     if (dtermDynActive) {
       const currentMin = current.dterm_lpf1_dyn_min_hz!;
       const currentMax = current.dterm_lpf1_dyn_max_hz ?? currentMin * DYNAMIC_LOWPASS_RATIO;
@@ -348,6 +375,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
         out.push({
           setting: 'dterm_lpf1_dyn_max_hz',
@@ -380,6 +408,7 @@ function recommendNoiseFloorAdjustments(
           impact,
           confidence,
           ruleId,
+          evidence,
         });
       }
     }
@@ -557,6 +586,7 @@ function recommendResonanceFixes(
         : `A strong ${typeLabel} was detected at ${Math.round(lowestPeakFreq)} Hz, which is below your current ` +
           `gyro filter cutoff of ${effectiveGyroCutoff} Hz. Lowering the filter will block this vibration.`;
 
+      const peakForEvidence = peaksNeedingLpf.find((p) => p.frequency === lowestPeakFreq);
       out.push({
         setting: settingName,
         currentValue: effectiveGyroCutoff,
@@ -565,6 +595,20 @@ function recommendResonanceFixes(
         impact: 'both',
         confidence: 'high',
         ruleId: 'F-RES-GYRO',
+        evidence: {
+          measurements: [
+            { label: 'Peak frequency', value: `${Math.round(lowestPeakFreq)} Hz` },
+            {
+              label: 'Peak amplitude',
+              value: `${Math.round(peakForEvidence?.amplitude ?? 0)} dB above floor`,
+            },
+            { label: 'Classified as', value: typeLabel },
+          ],
+          trigger:
+            `Peak ≥ ${RESONANCE_ACTION_THRESHOLD_DB} dB outside the dynamic notch range and below ` +
+            `the effective gyro cutoff — target = peak − ${RESONANCE_CUTOFF_MARGIN_HZ} Hz margin`,
+          anchorFrequencyHz: lowestPeakFreq,
+        },
       });
     }
   }
@@ -636,6 +680,11 @@ function recommendDynamicNotchAdjustments(
         impact: 'noise',
         confidence: 'medium',
         ruleId: 'F-DN-MIN',
+        evidence: {
+          measurements: [{ label: 'Lowest uncovered peak', value: `${Math.round(lowestPeak)} Hz` }],
+          trigger: `Peak below dyn_notch_min_hz (${current.dyn_notch_min_hz} Hz) — notch cannot track it`,
+          anchorFrequencyHz: lowestPeak,
+        },
       });
     }
   }

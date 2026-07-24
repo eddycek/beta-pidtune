@@ -94,3 +94,27 @@ describe('BodePlot', () => {
     expect(screen.getAllByTestId('responsive-container')).toHaveLength(2);
   });
 });
+
+describe('BodePlot coherence section (P3.1)', () => {
+  function withCoherence(size = 50): BodeResult {
+    const base = makeBodeResult(size);
+    const coherence = new Float64Array(size);
+    for (let i = 0; i < size; i++) coherence[i] = Math.max(0, 1 - i * 0.02);
+    return { ...base, coherence };
+  }
+
+  it('renders the coherence chart when coherence data is present', () => {
+    const bode = { roll: withCoherence(), pitch: withCoherence(), yaw: withCoherence() };
+    render(<BodePlot bode={bode} />);
+    expect(screen.getByText(/Coherence γ²/)).toBeInTheDocument();
+    expect(screen.getAllByTestId('line-chart')).toHaveLength(3);
+    expect(screen.getByText(/at least 0.5/)).toBeInTheDocument();
+  });
+
+  it('omits the coherence chart when no axis has coherence data', () => {
+    const bode = { roll: makeBodeResult(), pitch: makeBodeResult(), yaw: makeBodeResult() };
+    render(<BodePlot bode={bode} />);
+    expect(screen.queryByText(/Coherence γ²/)).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('line-chart')).toHaveLength(2);
+  });
+});

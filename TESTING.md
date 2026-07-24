@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3317 unit tests across 150 files (3294 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3325 unit tests across 150 files (3302 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -196,7 +196,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `TuningWorkflowModal/TuningWorkflowModal.test.tsx` | 23 | Workflow preparation modal, 3-tab layout (Filter/PID/Flash), mode-aware step filtering, flight guide sections |
 | `AnalysisOverview/AnalysisOverview.test.tsx` | 39 | Diagnostic-only analysis view, auto-parse, session picker, breadcrumb navigation, session metadata, FF warning, RPM status, data quality pill, TF analysis, wind disturbance pill, mechanical health warnings |
 | `TuningWizard/PIDAnalysisStep.test.tsx` | 10 | PID results display, flight style pill, step count pluralization, data quality pill |
-| `TuningWizard/RecommendationCard.test.tsx` | 11 | Setting label lookup, value display, change percentage, confidence, feedforward labels |
+| `TuningWizard/RecommendationCard.test.tsx` | 13 | Setting label lookup, value display, change percentage, confidence, feedforward labels, measured-evidence block (rendered/omitted) |
 | `TuningWizard/ApplyConfirmationModal.test.tsx` | 8 | Change counts, confirm/cancel, reboot warning |
 | `TuningWizard/QuickAnalysisStep.test.tsx` | 6 | Quick analysis dual-panel (filter + TF), auto-run, progress, retry |
 | `TuningWizard/WizardProgress.test.tsx` | 10 | Step indicator, mode-aware filtering (filter/pid/quick), current/done/upcoming states |
@@ -231,9 +231,9 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | File | Tests | Description |
 |------|-------|-------------|
 | `TuningWizard/charts/chartUtils.test.ts` | 20 | Data conversion, downsampling, findBestStep, robust Y domain |
-| `TuningWizard/charts/SpectrumChart.test.tsx` | 8 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0) |
+| `TuningWizard/charts/SpectrumChart.test.tsx` | 10 | FFT spectrum chart rendering, filter-response overlay (curves + dyn notch shading, disabled filters, notch count 0), rule-anchor peak tagging (tagged/untagged) |
 | `TuningWizard/charts/StepResponseChart.test.tsx` | 10 | Step response chart rendering, navigation |
-| `TuningWizard/charts/BodePlot.test.tsx` | 4 | Bode plot (magnitude + phase) rendering for transfer function |
+| `TuningWizard/charts/BodePlot.test.tsx` | 6 | Bode plot (magnitude + phase) rendering for transfer function, coherence γ² section (rendered with data, omitted without) |
 | `TuningWizard/charts/TFStepResponseChart.test.tsx` | 6 | TF synthetic step response chart, single/comparison modes, overshoot metrics, delta pill |
 
 ### Contexts
@@ -360,7 +360,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/FFTCompute.test.ts` | 24 | Hanning window, Welch's method, sine detection, calibrated v2 power-spectrum scale (detrending, power-domain averaging, known-amplitude sine reads 10·log10(A²/2)) |
 | `analysis/SegmentSelector.test.ts` | 31 | Hover detection, throttle sweep detection, throttle normalization, yaw steadiness gating (1.5× threshold) |
 | `analysis/NoiseAnalyzer.test.ts` | 43 | Peak detection (plateau handling, 15 Hz min spacing, parabolic sub-bin interpolation), size-aware frame-resonance classification, noise floor, throttle-track reclassification (reclassifyPeaksWithThrottle: tracking → motor_harmonic, stationary → frame_resonance/electrical, insufficient bands/prominence keeps heuristic, classifiedBy + throttleTrack stamps) |
-| `analysis/FilterRecommender.test.ts` | 114 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance (incl. disabled-notch dyn_notch_count=0 coverage), LPF2 recommendations (incl. D-term disable threshold boundary), conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q (3-4" midpoint 850), D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard, yaw-only resonance observation (F-YAW-RES), informational recs bypass deduplication, LPF2 latency budget (high-confidence disable when over budget, enable gated by prospective delay, F-LPF2-BUDGET-* advisory, legacy no-delay behavior) |
+| `analysis/FilterRecommender.test.ts` | 116 | Noise-based targets, convergence, safety bounds, RPM-aware bounds, dynamic notch, propwash floor, medium noise handling, notch-aware resonance (incl. disabled-notch dyn_notch_count=0 coverage), LPF2 recommendations (incl. D-term disable threshold boundary), conditional Q, motor harmonic diagnostic (F-MOTOR-DIAG), structured ruleId on all recommendations, iterm_relax, anti-gravity, thrust linear, RPM Q (3-4" midpoint 850), D-max, dyn idle, TPA, D-term expo, pidsum limit, FF rate limit, FF-dominated noise guard, yaw-only resonance observation (F-YAW-RES), informational recs bypass deduplication, LPF2 latency budget (high-confidence disable when over budget, enable gated by prospective delay, F-LPF2-BUDGET-* advisory, legacy no-delay behavior), structured evidence on resonance/noise-floor rules |
 | `analysis/DataQualityScorer.test.ts` | 39 | Filter/PID data quality scoring, tier mapping, warnings, confidence adjustment, TF data quality, low coherence warning |
 | `analysis/FilterAnalyzer.test.ts` | 20 | End-to-end pipeline, progress reporting, segment fallback warnings, RPM context propagation, data quality scoring, throttle spectrogram, group delay |
 | `analysis/ThrottleSpectrogramAnalyzer.test.ts` | 23 | Throttle-dependent spectrogram analysis, frequency-throttle mapping, noise source tracking, contiguous-run gating (findContiguousRuns, min 512 samples, length-weighted power average) |

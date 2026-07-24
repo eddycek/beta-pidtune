@@ -223,6 +223,7 @@ export function TuningSummaryStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
                 unit="Hz"
               />
             ))}
@@ -246,6 +247,7 @@ export function TuningSummaryStep({
                 reason={rec.reason}
                 impact={rec.impact}
                 confidence={rec.confidence}
+                evidence={rec.evidence}
               />
             ))}
           </div>

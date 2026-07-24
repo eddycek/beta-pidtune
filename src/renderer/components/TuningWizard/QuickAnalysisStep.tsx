@@ -113,6 +113,7 @@ export function QuickAnalysisStep({
                 <SpectrumChart
                   noise={filterResult.noise}
                   filterSettings={filterResult.filterSettings}
+                  recommendations={filterResult.recommendations}
                 />
                 <div className="axis-summary">
                   {(['roll', 'pitch', 'yaw'] as const).map((axis) => {
@@ -159,6 +160,7 @@ export function QuickAnalysisStep({
                     reason={rec.reason}
                     impact={rec.impact}
                     confidence={rec.confidence}
+                    evidence={rec.evidence}
                     unit="Hz"
                   />
                 ))}
@@ -224,6 +226,7 @@ export function QuickAnalysisStep({
                     reason={rec.reason}
                     impact={rec.impact}
                     confidence={rec.confidence}
+                    evidence={rec.evidence}
                   />
                 ))}
               </div>

@@ -146,6 +146,16 @@ function recommendMinHz(
         impact: 'noise',
         confidence: 'medium',
         ruleId: 'F-RPM-MIN-IDLE',
+        evidence: {
+          measurements: [
+            {
+              label: 'Dynamic idle floor',
+              value: `${dynIdle * 100} RPM (${Math.round(idleHz)} Hz)`,
+            },
+            { label: 'Current rpm_filter_min_hz', value: `${minHz} Hz` },
+          ],
+          trigger: `Notch floor above the idle fundamental leaves ${Math.round(idleHz)}-${minHz} Hz uncovered`,
+        },
       });
     } else {
       // Floor far below anything the motors can reach — wasted low-frequency notching
@@ -186,6 +196,14 @@ function recommendMinHz(
       impact: 'noise',
       confidence: 'medium',
       ruleId: 'F-RPM-MIN-TRACK',
+      evidence: {
+        measurements: [
+          { label: 'Lowest tracked fundamental', value: `${Math.round(fundamental.minHz)} Hz` },
+          { label: 'Current rpm_filter_min_hz', value: `${minHz} Hz` },
+        ],
+        trigger: 'Measured fundamental track reaches below the notch floor',
+        anchorFrequencyHz: fundamental.peak.frequency,
+      },
     });
   }
 }
@@ -234,6 +252,18 @@ function recommendHarmonicCount(
       impact: 'noise',
       confidence: 'medium',
       ruleId: 'F-RPM-HARM-UP',
+      evidence: {
+        measurements: [
+          { label: 'Fundamental track', value: `~${Math.round(fundamental.medianHz)} Hz` },
+          { label: 'Residual harmonic track', value: `~${Math.round(bestPeak.medianHz)} Hz` },
+          {
+            label: 'Frequency ratio',
+            value: `${(bestPeak.medianHz / fundamental.medianHz).toFixed(2)}× (order ${bestOrder})`,
+          },
+        ],
+        trigger: `Tracked peak at an integer multiple above the current harmonic count (${harmonics})`,
+        anchorFrequencyHz: bestPeak.peak.frequency,
+      },
     });
   }
 }

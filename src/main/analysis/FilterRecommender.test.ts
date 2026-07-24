@@ -1776,3 +1776,28 @@ describe('LPF2 latency budget (P2.7)', () => {
     expect(rec!.reason).not.toContain('budget');
   });
 });
+
+describe('recommendation evidence (P3.1)', () => {
+  it('attaches peak evidence with a chart anchor to resonance recommendations', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 160, amplitude: 25, type: 'frame_resonance' }],
+    });
+    const recs = recommend(noise, { ...DEFAULT_FILTER_SETTINGS, dyn_notch_count: 0 });
+    const rec = recs.find((r) => r.ruleId === 'F-RES-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.evidence).toBeDefined();
+    expect(rec!.evidence!.anchorFrequencyHz).toBe(160);
+    expect(rec!.evidence!.measurements.some((m) => m.value.includes('160 Hz'))).toBe(true);
+  });
+
+  it('attaches measured noise floors to noise-floor recommendations', () => {
+    const noise = makeNoiseProfile({ level: 'high', rollFloor: -6, pitchFloor: -8 });
+    const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
+    const rec = recs.find((r) => r.ruleId === 'F-NF-H-GYRO');
+    expect(rec).toBeDefined();
+    expect(rec!.evidence).toBeDefined();
+    expect(rec!.evidence!.measurements.some((m) => m.label === 'Roll noise floor')).toBe(true);
+    expect(rec!.evidence!.trigger).toContain('deadzone');
+  });
+});
