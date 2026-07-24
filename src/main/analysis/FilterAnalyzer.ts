@@ -34,6 +34,7 @@ import { estimateGroupDelay } from './GroupDelayEstimator';
 import { analyzeWindDisturbance } from './WindDisturbanceDetector';
 import { checkMechanicalHealth } from './MechanicalHealthChecker';
 import { analyzeDynamicLowpass, recommendDynamicLowpass } from './DynamicLowpassRecommender';
+import { optimizeFilterPlacement, recommendFilterPlacement } from './FilterPlacementOptimizer';
 import { FFT_WINDOW_SIZE, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ } from './constants';
 
 /** Maximum number of segments to use (more = slower but more accurate) */
@@ -216,10 +217,22 @@ export async function analyze(
   // Step 9: Profile-aware advisory recommendations
   appendProfileAdvisories(recommendations, currentSettings, options);
 
+  // Step 10: Filter placement optimizer (advisory) — the latency-optimal
+  // discrete config that still covers every measured peak
+  const filterPlacement = optimizeFilterPlacement(
+    noiseProfile,
+    currentSettings,
+    rpmActive,
+    options?.droneSize
+  );
+  const placementRec = recommendFilterPlacement(filterPlacement, options?.droneSize);
+  if (placementRec) recommendations.push(placementRec);
+
   onProgress?.({ step: 'recommending', percent: 100 });
 
   return {
     noise: noiseProfile,
+    ...(filterPlacement ? { filterPlacement } : {}),
     recommendations,
     summary,
     analysisTimeMs: Math.round(performance.now() - startTime),

@@ -239,6 +239,21 @@ export interface FilterAnalysisResult {
   /** Filter settings the analysis ran against (post BBL-header enrichment) —
    * lets the renderer overlay the configured filter response on spectra */
   filterSettings?: CurrentFilterSettings;
+  /** Filter placement optimizer result (P3.3) — latency-optimal discrete
+   * config that still covers every measured peak. Advisory only. */
+  filterPlacement?: {
+    feasible: boolean;
+    best?: {
+      gyro_lpf1_static_hz: number;
+      gyro_lpf2_static_hz: number;
+      dyn_notch_count: number;
+      dyn_notch_q: number;
+      delayMs: number;
+    };
+    currentDelayMs: number;
+    deltaMs?: number;
+    peaks: { frequencyHz: number; amplitudeDb: number }[];
+  };
   /** Verification flight similarity (only present when analyzing verification log with reference context) */
   verificationSimilarity?: VerificationSimilarity;
 }

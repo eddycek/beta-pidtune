@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3356 unit tests across 153 files (3333 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3365 unit tests across 154 files (3342 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -386,6 +386,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/MechanicalHealthChecker.test.ts` | 21 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback) |
 | `analysis/DynamicLowpassRecommender.test.ts` | 31 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId, disable hysteresis (4 dB threshold, 4-6 dB gray zone leaves config untouched) |
 | `analysis/SliderMapper.test.ts` | 16 | Slider-aligned PID mapping, master multiplier, PD ratio, buildRecommendedPIDs, slider delta computation |
+| `analysis/FilterPlacementOptimizer.test.ts` | 9 | Filter placement optimizer (P3.3): notch-vs-lowpass tradeoff, infeasible low-frequency peak, LPF1-off requires RPM, delay delta vs current config, residual target, advisory emission (improvement threshold, near-optimal silence, infeasible silence) |
 | `analysis/SystemIdentifier.test.ts` | 9 | System identification (P3.2): known 2nd-order plant recovery from analytic closed loop (ωn/ζ/τ tolerances), coherence + bin-count gates, predicted step settles to unity, D-raise reduces predicted overshoot, P-raise speeds rise, what-if current+proposed pair, BF PID scale anchor |
 | `analysis/FeedforwardAnalyzer.test.ts` | 65 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic, FF-RC-SMOOTH advisory skipped for aggressive style, deriveMaxStickRate (max \|setpoint\|, floor 300, fallback 670) |
 | `analysis/BayesianPIDOptimizer.test.ts` | 31 | Gaussian Process surrogate, Expected Improvement, Latin Hypercube Sampling, bounds |
