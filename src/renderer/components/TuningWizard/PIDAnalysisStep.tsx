@@ -1,5 +1,6 @@
 import React from 'react';
 import { RecommendationCard } from './RecommendationCard';
+import { PreviousSessionComparison } from './PreviousSessionComparison';
 import { StepResponseChart } from './charts/StepResponseChart';
 import type { PIDAnalysisResult, AnalysisProgress } from '@shared/types/analysis.types';
 import type { FlightStyle } from '@shared/types/profile.types';
@@ -227,6 +228,8 @@ export function PIDAnalysisStep({
             <StepResponseChart roll={pidResult.roll} pitch={pidResult.pitch} yaw={pidResult.yaw} />
           </>
         )}
+
+        <PreviousSessionComparison mode="pid" pidResult={pidResult} />
 
         {pidResult.recommendations.length > 0 ? (
           <div className="recommendation-list">

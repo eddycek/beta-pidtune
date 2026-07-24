@@ -35,6 +35,7 @@ Key components:
 - **useTuningWizard hook**: State management for parse/filter/PID analysis and apply lifecycle
 - **WizardProgress**: Visual step indicator, dynamic step filtering by mode
 - **Step components**: TestFlightGuideStep (renders FlightGuideContent), SessionSelectStep, FilterAnalysisStep, PIDAnalysisStep, QuickAnalysisStep (Flash Tune), TuningSummaryStep
+- **PreviousSessionComparison** (P2.4): shown inside FilterAnalysisStep/PIDAnalysisStep when the profile has archived history — overlays the last completed session's compact spectrum (NoiseComparisonChart) or step metrics (StepResponseComparison) against the current analysis. Prefers the previous session's verification-flight metrics; refuses cross-scale (`spectrumScaleVersion`) and cross-method (`metricsSource` per-step vs deconvolved) comparisons with an explanatory note
 - **ApplyConfirmationModal**: Confirmation dialog (snapshot option, reboot warning)
 - **RecommendationCard**: Shared component used across analysis steps (FilterAnalysisStep, PIDAnalysisStep, QuickAnalysisStep)
 - Flight guide data in `src/shared/constants/flightGuide.ts`

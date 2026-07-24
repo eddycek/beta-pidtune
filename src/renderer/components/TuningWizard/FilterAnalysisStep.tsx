@@ -1,5 +1,6 @@
 import React from 'react';
 import { RecommendationCard } from './RecommendationCard';
+import { PreviousSessionComparison } from './PreviousSessionComparison';
 import { SpectrumChart } from './charts/SpectrumChart';
 import { ThrottleSpectrogramChart } from './charts/ThrottleSpectrogramChart';
 import type { FilterAnalysisResult, AnalysisProgress } from '@shared/types/analysis.types';
@@ -244,6 +245,8 @@ export function FilterAnalysisStep({
             />
           </div>
         )}
+
+        <PreviousSessionComparison mode="filter" filterResult={filterResult} />
 
         {filterResult.recommendations.length > 0 ? (
           <div className="recommendation-list">

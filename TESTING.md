@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3325 unit tests across 150 files (3302 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3331 unit tests across 151 files (3308 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -192,6 +192,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `TuningWizard/TuningWizard.test.tsx` | 46 | Multi-step wizard flow, results display, apply, mode-aware routing, onApplyComplete with metrics, FF warning, RPM status, flight style display |
 | `TuningWizard/FlightGuideContent.test.tsx` | 11 | Flight guide content rendering, version-aware tip filtering |
 | `TuningWizard/TestFlightGuideStep.test.tsx` | 5 | Flight guide step integration |
+| `TuningWizard/PreviousSessionComparison.test.tsx` | 6 | Before/after comparison vs last completed session: noise + step comparisons rendered, cross-scale and cross-method guards, empty history, verification-metrics preference |
 | `TuningWizard/PhaseIllustration.test.tsx` | 11 | Phase illustration SVG rendering, custom size, aria-hidden, unknown title fallback |
 | `TuningWorkflowModal/TuningWorkflowModal.test.tsx` | 23 | Workflow preparation modal, 3-tab layout (Filter/PID/Flash), mode-aware step filtering, flight guide sections |
 | `AnalysisOverview/AnalysisOverview.test.tsx` | 39 | Diagnostic-only analysis view, auto-parse, session picker, breadcrumb navigation, session metadata, FF warning, RPM status, data quality pill, TF analysis, wind disturbance pill, mechanical health warnings |
