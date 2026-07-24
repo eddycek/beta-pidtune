@@ -30,6 +30,10 @@ export const THROTTLE_MAX_HOVER = 0.75;
 /** Maximum gyro standard deviation (deg/s) for a "steady" segment */
 export const GYRO_STEADY_MAX_STD = 50;
 
+/** Yaw steadiness threshold multiplier — yaw is inherently noisier than
+ * roll/pitch, but an active yaw spin still disqualifies a "steady" segment. */
+export const YAW_STEADY_MULTIPLIER = 1.5;
+
 /** Minimum segment duration in seconds */
 export const SEGMENT_MIN_DURATION_S = 0.5;
 

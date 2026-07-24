@@ -13,6 +13,7 @@ import {
   THROTTLE_MIN_FLIGHT,
   THROTTLE_MAX_HOVER,
   GYRO_STEADY_MAX_STD,
+  YAW_STEADY_MULTIPLIER,
   SEGMENT_MIN_DURATION_S,
   SEGMENT_WINDOW_DURATION_S,
   SWEEP_MIN_THROTTLE_RANGE,
@@ -36,6 +37,7 @@ export function findSteadySegments(flightData: BlackboxFlightData): FlightSegmen
   const throttle = flightData.setpoint[3]; // Throttle channel
   const gyroRoll = flightData.gyro[0];
   const gyroPitch = flightData.gyro[1];
+  const gyroYaw = flightData.gyro[2];
 
   const numSamples = throttle.values.length;
   if (numSamples === 0) return [];
@@ -54,13 +56,19 @@ export function findSteadySegments(flightData: BlackboxFlightData): FlightSegmen
       continue;
     }
 
-    // Check gyro variance in a local window
+    // Check gyro variance in a local window (yaw with a relaxed threshold —
+    // inherently noisier, but an active yaw spin is not a steady hover)
     const wStart = Math.max(0, i - halfWindow);
     const wEnd = Math.min(numSamples, i + halfWindow);
     const rollStd = computeStd(gyroRoll.values, wStart, wEnd);
     const pitchStd = computeStd(gyroPitch.values, wStart, wEnd);
+    const yawStd = computeStd(gyroYaw.values, wStart, wEnd);
 
-    if (rollStd <= GYRO_STEADY_MAX_STD && pitchStd <= GYRO_STEADY_MAX_STD) {
+    if (
+      rollStd <= GYRO_STEADY_MAX_STD &&
+      pitchStd <= GYRO_STEADY_MAX_STD &&
+      yawStd <= GYRO_STEADY_MAX_STD * YAW_STEADY_MULTIPLIER
+    ) {
       steadyMask[i] = 1;
     }
   }

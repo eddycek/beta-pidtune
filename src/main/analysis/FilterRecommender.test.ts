@@ -1601,3 +1601,48 @@ describe('variability-aware hysteresis', () => {
     }
   });
 });
+
+describe('yaw-only resonance observation (F-YAW-RES)', () => {
+  it('emits an informational observation for a strong yaw-only peak outside notch range', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dyn_notch_count: 0, // notch disabled → nothing covers the yaw peak
+    };
+
+    const recs = recommend(noise, current);
+    const obs = recs.find((r) => r.ruleId === 'F-YAW-RES');
+    expect(obs).toBeDefined();
+    expect(obs!.informational).toBe(true);
+    expect(obs!.currentValue).toBe(obs!.recommendedValue);
+    expect(obs!.reason).toContain('130');
+  });
+
+  it('stays silent when the notch covers the yaw peak', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    // Default settings: notch enabled and 130 Hz within range
+    const recs = recommend(noise, DEFAULT_FILTER_SETTINGS);
+    expect(recs.find((r) => r.ruleId === 'F-YAW-RES')).toBeUndefined();
+  });
+
+  it('stays silent when the same peak also appears on roll (other rules act)', () => {
+    const noise = makeNoiseProfile({
+      level: 'medium',
+      rollPeaks: [{ frequency: 128, amplitude: 20, type: 'frame_resonance' }],
+      yawPeaks: [{ frequency: 130, amplitude: 18, type: 'frame_resonance' }],
+    });
+    const current: CurrentFilterSettings = {
+      ...DEFAULT_FILTER_SETTINGS,
+      dyn_notch_count: 0,
+    };
+
+    const recs = recommend(noise, current);
+    expect(recs.find((r) => r.ruleId === 'F-YAW-RES')).toBeUndefined();
+  });
+});

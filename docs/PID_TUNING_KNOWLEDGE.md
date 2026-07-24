@@ -610,6 +610,9 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 **Rule 5: Motor Harmonic Diagnostic** (when RPM filter active)
 - If motor harmonics still detected at ≥12 dB: emit warning about possible `motor_poles` misconfiguration or ESC telemetry issues
 
+**Rule 7: Yaw-Only Resonance Observation (F-YAW-RES)** — informational
+- Yaw is deliberately excluded from LPF cutoff decisions (inherently noisier; lowering a global LPF for a yaw-only peak taxes roll/pitch latency). But a yaw peak ≥12 dB that the dynamic notch does not cover and that has no roll/pitch counterpart (within 15 Hz) is surfaced as an informational observation — it often indicates a loose FC stack, uneven motor mounting, or yaw-axis frame flex.
+
 **Deduplication**: For overlapping recommendations on same parameter — keep more aggressive value, upgrade confidence if either was 'high'.
 
 ### PID Recommendation Rules
