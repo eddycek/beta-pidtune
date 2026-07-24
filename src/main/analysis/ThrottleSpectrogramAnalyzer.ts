@@ -25,6 +25,11 @@ export const DEFAULT_NUM_BANDS = 10;
 /** Minimum samples per band to compute a meaningful spectrum */
 export const MIN_SAMPLES_PER_BAND = 512;
 
+/** Minimum contiguous run length (samples) usable for a band FFT window.
+ * Bands are FFT'd per contiguous run — concatenating non-contiguous samples
+ * would create phantom spectral content at the splice discontinuities. */
+export const MIN_CONTIGUOUS_RUN = 512;
+
 /**
  * Bin flight data samples by throttle level and collect gyro indices per band.
  *
@@ -48,14 +53,66 @@ export function binByThrottle(throttleValues: Float64Array, numBands: number): n
 }
 
 /**
- * Collect gyro values at the given sample indices into a new Float64Array.
+ * Extract contiguous runs from an ascending list of original-sample indices.
+ * A run is a maximal stretch where each index is the previous one + 1.
+ * Returns [start, end) ranges in the original sample space, longest first.
  */
-function gatherSamples(gyroValues: Float64Array, indices: number[]): Float64Array {
-  const out = new Float64Array(indices.length);
-  for (let i = 0; i < indices.length; i++) {
-    out[i] = gyroValues[indices[i]];
+export function findContiguousRuns(
+  indices: number[],
+  minLength: number
+): Array<{ start: number; end: number }> {
+  const runs: Array<{ start: number; end: number }> = [];
+  let runStart = 0;
+  for (let i = 1; i <= indices.length; i++) {
+    if (i === indices.length || indices[i] !== indices[i - 1] + 1) {
+      if (i - runStart >= minLength) {
+        runs.push({ start: indices[runStart], end: indices[i - 1] + 1 });
+      }
+      runStart = i;
+    }
   }
-  return out;
+  runs.sort((a, b) => b.end - b.start - (a.end - a.start));
+  return runs;
+}
+
+/**
+ * Weighted power-domain average of per-run Welch spectra for one axis.
+ * Each run is FFT'd on its own contiguous slice; averages are weighted by
+ * run length. All runs use the same window size → identical frequency bins.
+ */
+function averageRunSpectra(
+  gyroValues: Float64Array,
+  runs: Array<{ start: number; end: number }>,
+  sampleRateHz: number,
+  windowSize: number
+): PowerSpectrum {
+  const numBins = windowSize / 2 + 1;
+  const avgPower = new Float64Array(numBins);
+  let frequencies: Float64Array | null = null;
+  let totalWeight = 0;
+
+  for (const run of runs) {
+    const slice = gyroValues.subarray(run.start, run.end);
+    if (slice.length < windowSize) continue;
+    const spectrum = computePowerSpectrum(slice, sampleRateHz, windowSize);
+    if (!frequencies) frequencies = spectrum.frequencies;
+    const weight = run.end - run.start;
+    for (let i = 0; i < numBins; i++) {
+      avgPower[i] += Math.pow(10, spectrum.magnitudes[i] / 10) * weight;
+    }
+    totalWeight += weight;
+  }
+
+  if (!frequencies || totalWeight === 0) {
+    return { frequencies: new Float64Array(0), magnitudes: new Float64Array(0) };
+  }
+
+  const magnitudes = new Float64Array(numBins);
+  for (let i = 0; i < numBins; i++) {
+    const avg = avgPower[i] / totalWeight;
+    magnitudes[i] = avg > 1e-24 ? 10 * Math.log10(avg) : -240;
+  }
+  return { frequencies, magnitudes };
 }
 
 /**
@@ -98,8 +155,16 @@ export function computeThrottleSpectrogram(
       sampleCount: indices.length,
     };
 
-    if (indices.length >= MIN_SAMPLES_PER_BAND) {
-      // Compute spectrum per axis
+    // Only contiguous runs are FFT'd — concatenating non-contiguous samples
+    // creates phantom spectral content at splice discontinuities.
+    const runs =
+      indices.length >= MIN_SAMPLES_PER_BAND ? findContiguousRuns(indices, MIN_CONTIGUOUS_RUN) : [];
+
+    if (runs.length > 0) {
+      // Window fits inside the longest run (runs are sorted longest-first)
+      const longestRun = runs[0].end - runs[0].start;
+      const windowSize = Math.min(FFT_WINDOW_SIZE, prevPowerOf2(longestRun));
+
       const spectra: [PowerSpectrum, PowerSpectrum, PowerSpectrum] = [
         { frequencies: new Float64Array(0), magnitudes: new Float64Array(0) },
         { frequencies: new Float64Array(0), magnitudes: new Float64Array(0) },
@@ -107,12 +172,13 @@ export function computeThrottleSpectrogram(
       ];
       const noiseFloors: [number, number, number] = [0, 0, 0];
 
-      // Use smaller FFT window if band has fewer samples than default window size
-      const windowSize = Math.min(FFT_WINDOW_SIZE, nextPowerOf2(Math.floor(indices.length / 2)));
-
       for (let axis = 0; axis < 3; axis++) {
-        const samples = gatherSamples(flightData.gyro[axis].values, indices);
-        const raw = computePowerSpectrum(samples, flightData.sampleRateHz, windowSize);
+        const raw = averageRunSpectra(
+          flightData.gyro[axis].values,
+          runs,
+          flightData.sampleRateHz,
+          windowSize
+        );
         spectra[axis] = trimSpectrum(raw, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ);
         noiseFloors[axis] = estimateNoiseFloor(spectra[axis].magnitudes);
       }
@@ -134,11 +200,11 @@ export function computeThrottleSpectrogram(
 }
 
 /**
- * Round up to the next power of 2.
+ * Round down to the largest power of 2 <= n.
  */
-function nextPowerOf2(n: number): number {
-  if (n <= 0) return 1;
+function prevPowerOf2(n: number): number {
+  if (n < 1) return 1;
   let p = 1;
-  while (p < n) p <<= 1;
+  while (p * 2 <= n) p <<= 1;
   return p;
 }

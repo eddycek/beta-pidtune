@@ -8,7 +8,7 @@
  */
 
 import type { BlackboxFlightData } from '@shared/types/blackbox.types';
-import { binByThrottle } from './ThrottleSpectrogramAnalyzer';
+import { binByThrottle, findContiguousRuns } from './ThrottleSpectrogramAnalyzer';
 import {
   estimateTransferFunction,
   extractMetrics,
@@ -59,16 +59,10 @@ export interface ThrottleTFResult {
   tpaWarning?: string;
 }
 
-/**
- * Gather samples at given indices from a Float64Array.
- */
-function gatherSamples(data: Float64Array, indices: number[]): Float64Array {
-  const out = new Float64Array(indices.length);
-  for (let i = 0; i < indices.length; i++) {
-    out[i] = data[indices[i]];
-  }
-  return out;
-}
+/** Minimum contiguous run length usable for per-band TF estimation.
+ * TF deconvolution needs an unbroken time series — splicing non-contiguous
+ * samples corrupts the cross-spectra. */
+export const MIN_TF_RUN_SAMPLES = 2048;
 
 /**
  * Compute standard deviation of an array of numbers.
@@ -101,12 +95,17 @@ function estimatePerBand(
       return { throttleMin, throttleMax, sampleCount, metrics: null };
     }
 
-    const bandSetpoint = gatherSamples(setpoint, indices);
-    const bandGyro = gatherSamples(gyro, indices);
+    // TF needs an unbroken time series — use the longest contiguous run in
+    // the band instead of splicing non-contiguous samples together.
+    const runs = findContiguousRuns(indices, MIN_TF_RUN_SAMPLES);
+    if (runs.length === 0) {
+      return { throttleMin, throttleMax, sampleCount, metrics: null };
+    }
+    const run = runs[0]; // longest first
 
     const { bode, impulseResponse } = estimateTransferFunction(
-      bandSetpoint,
-      bandGyro,
+      setpoint.subarray(run.start, run.end),
+      gyro.subarray(run.start, run.end),
       sampleRateHz
     );
     const trimmed = trimBode(bode, TF_MAX_FREQ_HZ);
