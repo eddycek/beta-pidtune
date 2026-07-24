@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3310 unit tests across 150 files (3287 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3317 unit tests across 150 files (3294 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -387,7 +387,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/FeedforwardAnalyzer.test.ts` | 65 | Extended FF analysis, leading-edge overshoot detection, small-step jitter analysis, RC link rate extraction, smooth/jitter factor recommendations, RC link profile lookup, baseline comparison, merge logic, FF-RC-SMOOTH advisory skipped for aggressive style, deriveMaxStickRate (max \|setpoint\|, floor 300, fallback 670) |
 | `analysis/BayesianPIDOptimizer.test.ts` | 31 | Gaussian Process surrogate, Expected Improvement, Latin Hypercube Sampling, bounds |
 | `analysis/TransferFunctionEstimator.test.ts` | 32 | Wiener deconvolution, frequency response estimation, Bode plot data, PID recommendations from transfer function, DC gain from 1-5 Hz band average (computeDcGainDb with bin-1/bin-0 fallbacks), magnitude-squared coherence γ²(f) + coherenceMean (1-30 Hz band, ≥2 Welch windows), gain/phase margin crossingFound flags |
-| `analysis/ThrottleTFAnalyzer.test.ts` | 8 | Per-band TF analysis, throttle binning, variance computation, TPA warning, band boundaries |
+| `analysis/ThrottleTFAnalyzer.test.ts` | 15 | Per-band TF analysis (roll + pitch), throttle binning, variance computation, TPA warning, band boundaries, TF-driven TPA rules (rate-up/down, breakpoint onset, flat trend, guard conditions, worst-axis selection, rate cap) |
 | `analysis/VerificationMatcher.test.ts` | 33 | Flight similarity matching (mechanical peaks, throttle overlap, step count ratio), filter/PID/flash verification scoring, PID magnitude CoV sub-score, BBL fixture calibration with real flight data |
 | `analysis/ConvergenceDetector.test.ts` | 18 | Convergence detection, diminishing returns, iteration tracking, previous session comparison, spectrum-scale-version guard (refuses cross-scale noise comparison), flash phase-margin sentinel guard (ignores 90° placeholder) |
 | `analysis/AnalysisPipeline.realdata.bbl.test.ts` | 10 | Real BBL fixture integration tests with actual flight data |

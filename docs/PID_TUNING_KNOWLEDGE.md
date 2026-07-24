@@ -1040,6 +1040,12 @@ Composite 0-100 score computed after tuning session completes. Components vary b
 
 **FPVPIDlab `TPA_BY_SIZE`**: small (1-4"): rate 50, breakpoint **1250** (matches whoop/tiny presets); standard (5"): rate 65, breakpoint 1350; large (6-7"): rate 80, breakpoint 1250.
 
+**Measured TF-driven TPA rules (P2.8, implemented)** — Flash Tune only, from the per-throttle-band transfer function (`recommendTPAFromThrottleTF()` in ThrottleTFAnalyzer, roll + pitch, worst axis drives):
+- **TPA-TF-RATE-UP**: measured overshoot grows ≥10 pp from the low- to high-throttle bands (`TPA_TF_OVERSHOOT_DELTA_PP`) → gains too hot up top, raise `tpa_rate` by 10 (cap 80). Medium confidence.
+- **TPA-TF-BREAKPOINT**: with rate-up evidence, the breakpoint is lowered to the throttle where overshoot first exceeds the low-band mean +10 pp (mapped to µs, clamped 1250-1750, 100 µs deadzone). Medium confidence.
+- **TPA-TF-RATE-DOWN**: high-band overshoot < 5% while low bands overshoot ≥10 pp more → overdamped punch-outs, lower `tpa_rate` by 10 (floor 30). Low confidence.
+- Precedence: measured TF rules override the static size-based P-TPA advisory for the same setting; propwash safety rules (PW-TPA-*) always win. Requires `tpa_rate` in BBL headers and ≥3 bands with TF data.
+
 ### Anti-Gravity
 
 - Boosts I-term temporarily during rapid throttle changes (punch-outs, drops)

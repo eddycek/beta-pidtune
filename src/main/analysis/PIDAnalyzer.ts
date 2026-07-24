@@ -74,7 +74,7 @@ import {
   recommendRCLinkBaseline,
   mergeFFRecommendations,
 } from './FeedforwardAnalyzer';
-import { analyzeThrottleTF } from './ThrottleTFAnalyzer';
+import { analyzeThrottleTF, recommendTPAFromThrottleTF } from './ThrottleTFAnalyzer';
 import { computeDeconvolvedStepResponse } from './StepResponseStacker';
 import { DECONV_DISAGREEMENT_RATIO, DECONV_DISAGREEMENT_MIN_PP } from './constants';
 
@@ -522,9 +522,23 @@ async function analyzePIDCore(params: CoreParams): Promise<PIDAnalysisResult> {
     rawRecommendations.push(thrustLinearRec);
   }
 
-  // TPA tuning advisory (size + noise + propwash-based)
+  // TPA tuning: measured per-band TF trends (P2.8) take precedence over the
+  // static size-based advisory for the same setting; propwash safety rules
+  // (PW-TPA-*) always win — they protect prop wash recovery authority.
   const tpaRecs = recommendTPA(tpaContext, droneSize, throttleNoiseIncreaseDeltaDb, propWash);
-  rawRecommendations.push(...tpaRecs);
+  const pwTpaSettings = new Set(
+    tpaRecs.filter((r) => r.ruleId?.startsWith('PW-')).map((r) => r.setting)
+  );
+  const tfTpaRecs = throttleTF
+    ? recommendTPAFromThrottleTF(throttleTF, tpaContext).filter(
+        (r) => !pwTpaSettings.has(r.setting)
+      )
+    : [];
+  const tfTpaSettings = new Set(tfTpaRecs.map((r) => r.setting));
+  rawRecommendations.push(
+    ...tpaRecs.filter((r) => r.ruleId?.startsWith('PW-') || !tfTpaSettings.has(r.setting)),
+    ...tfTpaRecs
+  );
 
   // VBat sag compensation advisory (flight-style-based)
   const vbatSag = rawHeaders ? extractVbatSagCompensation(rawHeaders) : undefined;

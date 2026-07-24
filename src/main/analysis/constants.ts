@@ -849,6 +849,26 @@ export const RPM_FILTER_WEIGHTS_BY_SIZE: Record<DroneSize, [number, number, numb
   '7"': [90, 60, 90],
 };
 
+// ---- TF-Driven TPA Rules (P2.8) ----
+// Per-throttle-band transfer function trends drive measured tpa_rate/breakpoint
+// recommendations (vs the static size-based advisory). House thresholds.
+
+/** High-band vs low-band overshoot delta (pp) that proves TPA is too weak */
+export const TPA_TF_OVERSHOOT_DELTA_PP = 10;
+/** High-band overshoot below this while low bands overshoot → TPA too strong */
+export const TPA_TF_OVERDAMPED_OVERSHOOT_PCT = 5;
+/** tpa_rate adjustment step */
+export const TPA_TF_RATE_STEP = 10;
+/** Bounds for TF-driven tpa_rate recommendations */
+export const TPA_TF_RATE_MIN = 30;
+export const TPA_TF_RATE_MAX = 80;
+/** Minimum bands with TF data required for trend analysis */
+export const TPA_TF_MIN_BANDS = 3;
+/** Breakpoint recommendation bounds (µs) and minimum change to act on */
+export const TPA_TF_BREAKPOINT_MIN = 1250;
+export const TPA_TF_BREAKPOINT_MAX = 1750;
+export const TPA_TF_BREAKPOINT_DEADZONE = 100;
+
 // ---- Filter Latency Budget (P2.7) ----
 // Per-size total group-delay budgets for the gyro and D-term filter chains at
 // the 80 Hz reference. LPF2 enable/disable decisions weigh measured delay

@@ -112,6 +112,13 @@
       "ruleId": "P-DMAX-INFO",
       "confidence": "low",
       "informational": true
+    },
+    {
+      "setting": "tpa_rate",
+      "currentValue": 65,
+      "recommendedValue": 75,
+      "ruleId": "TPA-TF-RATE-UP",
+      "confidence": "medium"
     }
   ]
 }

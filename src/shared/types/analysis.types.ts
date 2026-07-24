@@ -630,6 +630,29 @@ export interface PIDAnalysisResult {
       overshootPercent: number;
       phaseMarginDeg: number;
     };
+    /** Pitch-axis per-band analysis (P2.8) — same band/variance shape as roll */
+    pitch?: {
+      bands: {
+        throttleMin: number;
+        throttleMax: number;
+        sampleCount: number;
+        metrics: {
+          bandwidthHz: number;
+          phaseMarginDeg: number;
+          gainMarginDb: number;
+          overshootPercent: number;
+          settlingTimeMs: number;
+          riseTimeMs: number;
+          dcGainDb: number;
+        } | null;
+      }[];
+      bandsWithData: number;
+      metricsVariance: {
+        bandwidthHz: number;
+        overshootPercent: number;
+        phaseMarginDeg: number;
+      };
+    };
     tpaWarning?: string;
   };
   /** Full transfer function data (present only for Flash Tune / Wiener deconvolution analysis).

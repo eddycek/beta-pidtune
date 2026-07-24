@@ -357,7 +357,7 @@ Automated end-to-end tests running in CI pipeline against a real FC connected to
 
 ## Progress Summary
 
-**Last Updated:** July 24, 2026 | **Tests:** 3310 unit tests across 150 files (3287 passing + 23 skipped) + 37 Playwright E2E tests | **PRs Merged:** #1–#432
+**Last Updated:** July 24, 2026 | **Tests:** 3317 unit tests across 150 files (3294 passing + 23 skipped) + 37 Playwright E2E tests | **PRs Merged:** #1–#432
 
 | Phase | Status | Notes |
 |-------|--------|-------|
