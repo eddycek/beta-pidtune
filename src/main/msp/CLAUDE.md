@@ -60,7 +60,7 @@ Never guess byte offsets — always cross-reference with the configurator source
 ## MSP PID Advanced (`MSP_PID_ADVANCED`, command 94)
 
 - `getFeedforwardConfiguration()` parses the base layout (FF boost/smooth/jitter/max-rate-limit, d_min per axis + gain/advance, iterm_relax type/cutoff, `feedforward_averaging`, `dyn_idle_min_rpm`) plus length-gated extended fields: `vbat_sag_compensation` and `thrust_linear` when the response reaches their offsets, and `anti_gravity_gain`/`tpa_mode`/`tpa_rate`/`tpa_breakpoint` from the 61-byte API 1.45+ layout (a response long enough for TPA also guarantees the ≥1.45 meaning of anti_gravity_gain @21)
-- These parsed fields feed `verifyAppliedConfig()` post-apply read-back — on older firmware without the extended layout the settings land in `unchecked` instead of failing verification
+- These parsed fields feed `verifyAppliedConfig()` post-apply read-back — on older firmware whose shorter layout omits them, the fields are absent from the read-back and verification silently skips those settings (same treatment as CLI-only settings; they must not flip `verified=false` or fire a false-positive auto diagnostic report)
 
 ## MSP Dataflash Read (`MSP_DATAFLASH_READ`, command 0x46)
 

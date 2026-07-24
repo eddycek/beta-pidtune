@@ -276,7 +276,7 @@ pidlab/
 │   │   │   ├── MechanicalHealthChecker.ts # Frame/motor health diagnostics
 │   │   │   ├── WindDisturbanceDetector.ts # Wind/disturbance detection
 │   │   │   ├── headerValidation.ts        # BB header diagnostics
-│   │   │   ├── throttleUtils.ts           # Shared throttle normalization + contiguous run finder
+│   │   │   ├── throttleUtils.ts           # Shared throttle normalization (contiguous-run finder lives in ThrottleSpectrogramAnalyzer)
 │   │   │   └── constants.ts               # Tunable thresholds
 │   │   ├── storage/             # Data managers
 │   │   │   ├── ProfileManager.ts        # Multi-quad profile CRUD

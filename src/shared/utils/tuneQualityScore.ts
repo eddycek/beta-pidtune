@@ -152,8 +152,10 @@ const COMPONENTS: ComponentDef[] = [
     label: 'Phase Margin',
     getValue: (_filter, _pid, _verification, tf) => {
       if (!tf) return undefined;
-      // Only axes with a measured gain crossover count — a capped 90°
-      // placeholder (no crossing found) must not read as "very stable".
+      // Exclude axes explicitly marked as having no measured gain crossover —
+      // a capped 90° placeholder must not read as "very stable". Records from
+      // older app versions lack the flag (undefined) and are kept for
+      // backward compatibility, since their margins cannot be re-derived.
       const axes = [tf.roll, tf.pitch, tf.yaw].filter((a) => a.phaseMarginCrossingFound !== false);
       if (axes.length === 0) return undefined;
       return axes.reduce((s, a) => s + a.phaseMarginDeg, 0) / axes.length;

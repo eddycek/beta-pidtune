@@ -302,7 +302,7 @@ Two independent analysis pipelines: **filter tuning** (FFT noise analysis) and *
 | `PropWashDetector.ts` | 367 | 20 | Propwash detection and analysis (clean-segment baseline) |
 | `DataQualityScorer.ts` | 403 | 39 | Flight data quality scoring (0-100), confidence adjustment, low coherence warning |
 | `headerValidation.ts` | 300 | 45 | BB header diagnostics, version-aware debug mode, RPM enrichment, preset gap analysis fields |
-| `throttleUtils.ts` | 24 | 4 | Shared throttle normalization + contiguous-run finder |
+| `throttleUtils.ts` | 24 | 4 | Shared throttle normalization heuristics (1000-2000/0-1000/0-100/0-1 formats) |
 | `constants.ts` | 927 | 11 | All tunable thresholds (validated by `constants.test.ts`) |
 
 #### Filter Analysis Pipeline
