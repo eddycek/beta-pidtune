@@ -304,7 +304,7 @@ Second harmonic (2nd value) typically lower (30-50) — less energy in 2nd harmo
 | Source | Frequency | Characteristics | Fix Strategy |
 |--------|-----------|----------------|--------------|
 | **Prop wash** | 20-90 Hz | Broadband burst during descents/deceleration | D-term, flying technique, I-term relax |
-| **Frame resonance** | 80-200 Hz | Fixed frequency, constant at all throttle levels | Notch filter, structural reinforcement |
+| **Frame resonance** | 80-200 Hz (5"; size-aware via `FRAME_RESONANCE_BY_SIZE`: 1"/2.5" 150-350, 3" 120-280, 4" 100-240, 6" 70-170, 7" 60-150) | Fixed frequency, constant at all throttle levels | Notch filter, structural reinforcement |
 | **Motor noise** | 150-400 Hz | Tracks with throttle (RPM), harmonic pattern | RPM filter, lowpass cutoff |
 | **Electrical noise** | >500 Hz | High frequency, ESC switching noise | Lowpass filter, capacitors |
 | **Bearing noise** | Variable | Broadband, worsens with bearing wear | Replace bearings/motors |

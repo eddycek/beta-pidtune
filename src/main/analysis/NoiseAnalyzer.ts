@@ -13,12 +13,14 @@ import type {
 import type { DroneSize } from '@shared/types/profile.types';
 import {
   PEAK_PROMINENCE_DB,
+  PEAK_MIN_SPACING_HZ,
   PEAK_LOCAL_WINDOW_BINS,
   NOISE_FLOOR_PERCENTILE,
   NOISE_LEVEL_BY_SIZE,
   NOISE_LEVEL_DEFAULT,
   FRAME_RESONANCE_MIN_HZ,
   FRAME_RESONANCE_MAX_HZ,
+  FRAME_RESONANCE_BY_SIZE,
   ELECTRICAL_NOISE_MIN_HZ,
   MOTOR_HARMONIC_TOLERANCE_RATIO,
   MOTOR_HARMONIC_TOLERANCE_MIN_HZ,
@@ -78,57 +80,107 @@ export function localNoiseFloor(
 /**
  * Detect peaks in a power spectrum using prominence-based detection.
  *
- * A peak is a local maximum where its magnitude exceeds the local noise
- * floor by more than the prominence threshold.
+ * A peak is a local maximum (with plateau support — a run of equal bins
+ * counts once, at its center) whose magnitude exceeds the local noise
+ * floor by more than the prominence threshold. Peak frequency and
+ * magnitude are refined by 3-point parabolic interpolation (sub-bin
+ * accuracy), and weaker candidates within `minSpacingHz` of a stronger
+ * peak are suppressed so a broad hump reports as one peak.
  */
 export function detectPeaks(
   spectrum: PowerSpectrum,
-  prominenceDb: number = PEAK_PROMINENCE_DB
+  prominenceDb: number = PEAK_PROMINENCE_DB,
+  minSpacingHz: number = PEAK_MIN_SPACING_HZ
 ): Array<{ frequency: number; amplitude: number; binIndex: number }> {
   const { frequencies, magnitudes } = spectrum;
   if (magnitudes.length < 3) return [];
 
-  const peaks: Array<{ frequency: number; amplitude: number; binIndex: number }> = [];
+  const candidates: Array<{ frequency: number; amplitude: number; binIndex: number }> = [];
 
-  for (let i = 1; i < magnitudes.length - 1; i++) {
-    // Local maximum check
-    if (magnitudes[i] <= magnitudes[i - 1] || magnitudes[i] <= magnitudes[i + 1]) {
+  let i = 1;
+  while (i < magnitudes.length - 1) {
+    // Skip while ascending or flat-from-below
+    if (magnitudes[i] < magnitudes[i - 1]) {
+      i++;
       continue;
     }
 
-    // Check prominence above local noise floor
-    const localFloor = localNoiseFloor(magnitudes, i);
-    const prominence = magnitudes[i] - localFloor;
-
-    if (prominence >= prominenceDb) {
-      peaks.push({
-        frequency: frequencies[i],
-        amplitude: prominence,
-        binIndex: i,
-      });
+    // Extend across a plateau of equal values
+    let plateauEnd = i;
+    while (plateauEnd + 1 < magnitudes.length && magnitudes[plateauEnd + 1] === magnitudes[i]) {
+      plateauEnd++;
     }
+
+    const isLeftRising = magnitudes[i] > magnitudes[i - 1];
+    const isRightFalling =
+      plateauEnd + 1 < magnitudes.length && magnitudes[plateauEnd] > magnitudes[plateauEnd + 1];
+
+    if (isLeftRising && isRightFalling) {
+      // Peak candidate at the plateau center
+      const center = Math.floor((i + plateauEnd) / 2);
+      const localFloor = localNoiseFloor(magnitudes, center);
+
+      // Parabolic interpolation for sub-bin frequency/magnitude
+      // (single-bin peaks only — a flat top has no curvature to fit)
+      let peakFreq = frequencies[center];
+      let peakMag = magnitudes[center];
+      if (plateauEnd === i && center > 0 && center < magnitudes.length - 1) {
+        const mPrev = magnitudes[center - 1];
+        const mCur = magnitudes[center];
+        const mNext = magnitudes[center + 1];
+        const denom = mPrev - 2 * mCur + mNext;
+        if (denom < 0) {
+          const delta = Math.max(-0.5, Math.min(0.5, (0.5 * (mPrev - mNext)) / denom));
+          const binWidth = frequencies[1] - frequencies[0];
+          peakFreq = frequencies[center] + delta * binWidth;
+          peakMag = mCur - 0.25 * (mPrev - mNext) * delta;
+        }
+      }
+
+      const prominence = peakMag - localFloor;
+      if (prominence >= prominenceDb) {
+        candidates.push({ frequency: peakFreq, amplitude: prominence, binIndex: center });
+      }
+    }
+
+    i = plateauEnd + 1;
   }
 
-  // Sort by amplitude (strongest first)
-  peaks.sort((a, b) => b.amplitude - a.amplitude);
+  // Sort by amplitude (strongest first), then enforce minimum spacing:
+  // a weaker candidate too close to an already-accepted peak is dropped.
+  candidates.sort((a, b) => b.amplitude - a.amplitude);
+
+  const peaks: Array<{ frequency: number; amplitude: number; binIndex: number }> = [];
+  for (const c of candidates) {
+    if (peaks.every((p) => Math.abs(p.frequency - c.frequency) >= minSpacingHz)) {
+      peaks.push(c);
+    }
+  }
 
   return peaks;
 }
 
 /**
  * Classify a noise peak based on its frequency.
+ *
+ * @param droneSize - Selects the size-aware frame-resonance band; smaller
+ *   frames resonate at higher frequencies (falls back to the 5" band).
  */
 export function classifyPeak(
   frequency: number,
-  allPeaks: Array<{ frequency: number }>
+  allPeaks: Array<{ frequency: number }>,
+  droneSize?: DroneSize
 ): NoisePeak['type'] {
   // Check for motor harmonics: equally-spaced peaks
   if (isMotorHarmonic(frequency, allPeaks)) {
     return 'motor_harmonic';
   }
 
-  // Frame resonance band
-  if (frequency >= FRAME_RESONANCE_MIN_HZ && frequency <= FRAME_RESONANCE_MAX_HZ) {
+  // Frame resonance band (size-aware)
+  const band = droneSize
+    ? FRAME_RESONANCE_BY_SIZE[droneSize]
+    : { min: FRAME_RESONANCE_MIN_HZ, max: FRAME_RESONANCE_MAX_HZ };
+  if (frequency >= band.min && frequency <= band.max) {
     return 'frame_resonance';
   }
 
@@ -191,7 +243,10 @@ function isMotorHarmonic(frequency: number, allPeaks: Array<{ frequency: number 
  * When multiple spectra are provided (from different segments), they are
  * averaged for a more robust noise estimate.
  */
-export function analyzeAxisNoise(spectra: PowerSpectrum[]): AxisNoiseProfile {
+export function analyzeAxisNoise(
+  spectra: PowerSpectrum[],
+  droneSize?: DroneSize
+): AxisNoiseProfile {
   if (spectra.length === 0) {
     return {
       spectrum: { frequencies: new Float64Array(0), magnitudes: new Float64Array(0) },
@@ -213,7 +268,7 @@ export function analyzeAxisNoise(spectra: PowerSpectrum[]): AxisNoiseProfile {
   const peaks: NoisePeak[] = rawPeaks.map((p) => ({
     frequency: p.frequency,
     amplitude: p.amplitude,
-    type: classifyPeak(p.frequency, rawPeaks),
+    type: classifyPeak(p.frequency, rawPeaks, droneSize),
   }));
 
   return {

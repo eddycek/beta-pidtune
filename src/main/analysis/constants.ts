@@ -68,6 +68,12 @@ export const SPECTRUM_SCALE_VERSION = 2;
  * Relative (peak vs floor) — identical meaning on the v1 and v2 scales. */
 export const PEAK_PROMINENCE_DB = 6;
 
+/** Peak detection: minimum spacing between reported peaks (Hz).
+ * A broad resonance hump spans several bins — without spacing enforcement
+ * it registers as multiple adjacent "peaks". Weaker candidates within this
+ * distance of a stronger peak are suppressed. */
+export const PEAK_MIN_SPACING_HZ = 15;
+
 /** Number of bins on each side for local noise floor estimation */
 export const PEAK_LOCAL_WINDOW_BINS = 50;
 
@@ -113,9 +119,32 @@ export const NOISE_LEVEL_DEFAULT: NoiseLevelThresholds = NOISE_LEVEL_BY_SIZE['5"
 
 // ---- Peak Classification Frequency Bands ----
 
-/** Frame resonance: typically 80-200 Hz */
+/** Frame resonance band for a 5" quad: typically 80-200 Hz.
+ * Fallback when drone size is unknown — use FRAME_RESONANCE_BY_SIZE otherwise. */
 export const FRAME_RESONANCE_MIN_HZ = 80;
 export const FRAME_RESONANCE_MAX_HZ = 200;
+
+/** Frame resonance band bounds per drone size (Hz). */
+export interface FrameResonanceBand {
+  min: number;
+  max: number;
+}
+
+/**
+ * Size-aware frame resonance bands. Smaller/stiffer/lighter frames resonate
+ * at higher frequencies than the classic 5" 80-200 Hz band — a 2.5" frame
+ * resonating at 300 Hz must not be classified as electrical noise.
+ * House extrapolation anchored on the 5" community convention.
+ */
+export const FRAME_RESONANCE_BY_SIZE: Record<DroneSize, FrameResonanceBand> = {
+  '1"': { min: 150, max: 350 },
+  '2.5"': { min: 150, max: 350 },
+  '3"': { min: 120, max: 280 },
+  '4"': { min: 100, max: 240 },
+  '5"': { min: 80, max: 200 },
+  '6"': { min: 70, max: 170 },
+  '7"': { min: 60, max: 150 },
+};
 
 /** Electrical noise: typically above 500 Hz */
 export const ELECTRICAL_NOISE_MIN_HZ = 500;

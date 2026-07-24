@@ -5,12 +5,12 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 36.4,
-        "type": "motor_harmonic"
+        "amplitude": 36.6,
+        "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.5,
+        "amplitude": 29.2,
         "type": "motor_harmonic"
       },
       {
@@ -20,23 +20,13 @@
       },
       {
         "frequency": 600,
-        "amplitude": 22.1,
+        "amplitude": 23.1,
         "type": "motor_harmonic"
       },
       {
-        "frequency": 27,
-        "amplitude": 11.1,
+        "frequency": 28,
+        "amplitude": 11.2,
         "type": "unknown"
-      },
-      {
-        "frequency": 54,
-        "amplitude": 7.5,
-        "type": "motor_harmonic"
-      },
-      {
-        "frequency": 57,
-        "amplitude": 6.3,
-        "type": "motor_harmonic"
       }
     ]
   },
@@ -45,17 +35,17 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 35.9,
-        "type": "motor_harmonic"
+        "amplitude": 36.1,
+        "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.1,
+        "amplitude": 28.9,
         "type": "motor_harmonic"
       },
       {
         "frequency": 600,
-        "amplitude": 21.9,
+        "amplitude": 22.9,
         "type": "motor_harmonic"
       },
       {
@@ -64,14 +54,9 @@
         "type": "motor_harmonic"
       },
       {
-        "frequency": 27,
-        "amplitude": 11.2,
+        "frequency": 28,
+        "amplitude": 11.4,
         "type": "unknown"
-      },
-      {
-        "frequency": 55,
-        "amplitude": 7,
-        "type": "motor_harmonic"
       }
     ]
   },
@@ -80,22 +65,22 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 36.6,
+        "amplitude": 36.8,
         "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.1,
+        "amplitude": 28.8,
         "type": "motor_harmonic"
       },
       {
         "frequency": 600,
-        "amplitude": 21.5,
+        "amplitude": 22.6,
         "type": "motor_harmonic"
       },
       {
         "frequency": 45,
-        "amplitude": 12.1,
+        "amplitude": 12.2,
         "type": "motor_harmonic"
       }
     ]
@@ -117,6 +102,13 @@
       "recommendedValue": 70,
       "ruleId": "F-RES-DTERM",
       "confidence": "high"
+    },
+    {
+      "setting": "dyn_notch_max_hz",
+      "currentValue": 600,
+      "recommendedValue": 620,
+      "ruleId": "F-DN-MAX",
+      "confidence": "medium"
     },
     {
       "setting": "dyn_notch_min_hz",

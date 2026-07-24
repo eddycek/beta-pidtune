@@ -5,32 +5,27 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 36.6,
+        "amplitude": 36.8,
         "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.5,
+        "amplitude": 29.2,
         "type": "motor_harmonic"
       },
       {
         "frequency": 600,
-        "amplitude": 22.3,
+        "amplitude": 23.4,
         "type": "motor_harmonic"
       },
       {
         "frequency": 45,
-        "amplitude": 18.6,
+        "amplitude": 18.7,
         "type": "motor_harmonic"
       },
       {
-        "frequency": 27,
-        "amplitude": 9.2,
-        "type": "unknown"
-      },
-      {
-        "frequency": 51,
-        "amplitude": 7.3,
+        "frequency": 28,
+        "amplitude": 9.3,
         "type": "unknown"
       }
     ]
@@ -40,17 +35,17 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 37,
+        "amplitude": 37.1,
         "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.8,
+        "amplitude": 29.5,
         "type": "motor_harmonic"
       },
       {
         "frequency": 600,
-        "amplitude": 22.1,
+        "amplitude": 23.2,
         "type": "motor_harmonic"
       },
       {
@@ -59,7 +54,7 @@
         "type": "motor_harmonic"
       },
       {
-        "frequency": 27,
+        "frequency": 28,
         "amplitude": 9.4,
         "type": "unknown"
       }
@@ -70,17 +65,17 @@
     "peaks": [
       {
         "frequency": 160,
-        "amplitude": 36.9,
+        "amplitude": 37.1,
         "type": "frame_resonance"
       },
       {
         "frequency": 320,
-        "amplitude": 28.4,
+        "amplitude": 29,
         "type": "unknown"
       },
       {
         "frequency": 600,
-        "amplitude": 21.9,
+        "amplitude": 23,
         "type": "electrical"
       }
     ]
@@ -102,6 +97,13 @@
       "recommendedValue": 70,
       "ruleId": "F-RES-DTERM",
       "confidence": "high"
+    },
+    {
+      "setting": "dyn_notch_max_hz",
+      "currentValue": 600,
+      "recommendedValue": 620,
+      "ruleId": "F-DN-MAX",
+      "confidence": "medium"
     },
     {
       "setting": "dyn_notch_min_hz",
