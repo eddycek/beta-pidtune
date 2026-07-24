@@ -11,7 +11,7 @@ FPVPIDlab reads your Blackbox log, analyzes the data (FFT noise spectrum, step r
 - **Safety-first** — automatic pre/post-tuning snapshots, all values clamped to proven safe bounds
 - **Multi-quad profiles** — auto-detects each FC by serial number, stores configs and history per quad
 - **Flight style adaptation** — Smooth (cinematic), Balanced (freestyle), Aggressive (racing) thresholds
-- **27 analysis modules** — FFT, step response, Wiener deconvolution, setpoint→gyro coherence, prop wash, D-term effectiveness, cross-axis coupling, throttle spectrograms, group delay, feedforward, dynamic lowpass, Bayesian optimizer, convergence detection, verification matching, and more
+- **31 analysis modules** — FFT, step response, Wiener deconvolution, deconvolved (stacked) step response, setpoint→gyro coherence, system identification with what-if prediction, prop wash, D-term effectiveness, cross-axis coupling, throttle spectrograms, group delay, feedforward, dynamic lowpass, RPM filter tuning, filter placement optimization, Bayesian optimizer, convergence detection, verification matching, and more
 - **Works offline** — demo mode with simulated FC for testing without hardware
 - **Anonymous telemetry** — opt-in usage telemetry with per-session analytics (tuning mode usage, drone sizes, quality scores, recommendation rule tracing, verification deltas; no flight data or PIDs ever sent)
 - **Freemium license system** — free tier (1 profile), Pro tier (unlimited profiles). Ed25519-signed offline-first license validation
@@ -249,18 +249,22 @@ pidlab/
 │   │   │   ├── commands.ts      # MSP command definitions
 │   │   │   └── types.ts         # MSP type definitions
 │   │   ├── blackbox/            # BBL binary log parser (6 modules, 245 tests)
-│   │   ├── analysis/            # Signal processing & tuning engine (27 modules)
+│   │   ├── analysis/            # Signal processing & tuning engine (31 modules)
 │   │   │   ├── FFTCompute.ts              # Welch's method, Hanning window
 │   │   │   ├── SegmentSelector.ts         # Hover/sweep segment detection
 │   │   │   ├── NoiseAnalyzer.ts           # Peak detection, noise classification
 │   │   │   ├── FilterRecommender.ts       # Noise-based filter targets
 │   │   │   ├── DynamicLowpassRecommender.ts # Dynamic lowpass cutoff optimization
+│   │   │   ├── RpmFilterRecommender.ts    # RPM filter tuning rules (min_hz, harmonics, weights)
+│   │   │   ├── FilterPlacementOptimizer.ts # Notch/LPF placement search (delay vs attenuation)
 │   │   │   ├── FilterAnalyzer.ts          # Filter analysis orchestrator
 │   │   │   ├── StepDetector.ts            # Step input detection in setpoint
 │   │   │   ├── StepMetrics.ts             # Rise time, overshoot, settling, FF classification
+│   │   │   ├── StepResponseStacker.ts     # Deconvolved (stacked) step response, magnitude split
 │   │   │   ├── PIDRecommender.ts          # Rule-based P/I/D recommendations
 │   │   │   ├── PIDAnalyzer.ts             # Unified PID analysis orchestrator (Deep + Flash)
 │   │   │   ├── TransferFunctionEstimator.ts # Wiener deconvolution engine
+│   │   │   ├── SystemIdentifier.ts        # Plant model fit + what-if step prediction
 │   │   │   ├── ThrottleTFAnalyzer.ts      # Per-band TF across throttle levels
 │   │   │   ├── DataQualityScorer.ts       # Flight data quality scoring (0-100)
 │   │   │   ├── PropWashDetector.ts        # Throttle-down event detection + severity

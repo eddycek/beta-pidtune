@@ -57,8 +57,8 @@
 │  │  ┌───┴──────────┐  ┌─────────────────┐  ┌──────────────────┐      │  │
 │  │  │MSPConnection │  │ BlackboxParser  │  │ Analysis Engine │      │  │
 │  │  │ + CLI Mode   │  │ (6 modules,     │  │ FFT + Step Resp │      │  │
-│  │  │ + fcEntered  │  │  245 tests)     │  │ (27 modules,    │      │  │
-│  │  │   CLI flag   │  │                 │  │  1127 tests)    │      │  │
+│  │  │ + fcEntered  │  │  245 tests)     │  │ (31 modules,    │      │  │
+│  │  │   CLI flag   │  │                 │  │  1207 tests)    │      │  │
 │  │  └───┬──────────┘  └─────────────────┘  └──────────────────┘      │  │
 │  │      │                                                             │  │
 │  │  ┌───┴──────────┐                                                  │  │
@@ -291,13 +291,17 @@ Two independent analysis pipelines: **filter tuning** (FFT noise analysis) and *
 | `SegmentSelector.ts` | 375 | 31 | Hover + throttle sweep detection, yaw steadiness gating (1.5×) |
 | `NoiseAnalyzer.ts` | 342 | 36 | Peak detection (plateau handling, 15 Hz spacing, parabolic interpolation), size-aware noise classification |
 | `FilterRecommender.ts` | 1045 | 108 | Noise-based filter targets, RPM-aware bounds, dynamic-lowpass-aware (tunes dyn_min/max when active), propwash floor, medium noise, notch-aware resonance, LPF2, yaw-only resonance observation, preset gap analysis settings |
+| `RpmFilterRecommender.ts` | 326 | 18 | RPM filter tuning rules (F-RPM-*): min_hz from dyn idle floor and measured fundamental track, harmonic count from integer-ratio tracks, fade-range/weights advisories |
+| `FilterPlacementOptimizer.ts` | 257 | 9 | Discrete search over LPF cutoffs / notch count / RPM harmonics minimizing group delay subject to attenuation targets at measured peaks (P3.3) |
 | `FilterAnalyzer.ts` | 372 | 20 | Filter analysis orchestrator (data quality, throttle spectrogram, group delay) |
 | `ThrottleSpectrogramAnalyzer.ts` | 210 | 23 | Throttle-dependent spectrogram analysis (contiguous runs only) |
 | `GroupDelayEstimator.ts` | 216 | 28 | Group delay estimation, filter latency measurement, uses dyn_min_hz when dynamic active |
 | `StepDetector.ts` | 164 | 16 | Derivative-based step input detection |
 | `StepMetrics.ts` | 416 | 53 | Rise time, overshoot, settling, trace, FF contribution, adaptive window |
+| `StepResponseStacker.ts` | 153 | 10 | Deconvolved (stacked) step response via Wiener windows, input-magnitude split (<500 / >500 deg/s), coherence-weighted trust gate (P2.1) |
 | `PIDRecommender.ts` | 1840 | 266 | Flight-PID-anchored P/D recommendations, FF-aware, damping ratio, I-term, quad-size-aware bounds, D-min/TPA advisory, TF coherence gate, preset gap analysis settings |
 | `PIDAnalyzer.ts` | 640 | 28 | PID analysis orchestrator (FF context, data quality, cross-axis, propwash) |
+| `SystemIdentifier.ts` | 357 | 9 | System identification: 2nd-order + delay plant fit from coherence-weighted H(f), what-if predicted step response for proposed gains (P3.2) |
 | `CrossAxisDetector.ts` | 162 | 20 | Cross-axis coupling detection |
 | `PropWashDetector.ts` | 367 | 20 | Propwash detection and analysis (clean-segment baseline) |
 | `DataQualityScorer.ts` | 403 | 39 | Flight data quality scoring (0-100), confidence adjustment, low coherence warning |
@@ -841,6 +845,8 @@ Hardware error (FC timeout, USB disconnect)
 | File | Key Exports |
 |------|-------------|
 | `metricsExtract.ts` | `downsampleSpectrum()`, `downsampleStepResponse()`, `extractFilterMetrics()`, `extractPIDMetrics()`, `extractThrottleSpectrogram()` — compact metrics for history storage |
+| `filterResponse.ts` | `lowpassMagnitudeDb()` (PT1/PT2/PT3/biquad), `notchMagnitudeDb()`, `dynLpfCutoffHz()`, `computeFilterChainCurve()`, `gyroLpf1CutoffAtThrottle()` — filter magnitude models for chart overlays |
+| `bfVersionCapabilities.ts` | `parseBFVersion()` (semver + calendar), `getBFCapabilities()` (4.4/4.5/4.6 gates), `translateSettingForVersion()` (d_min→d_max CLI rename) |
 
 ---
 
@@ -851,8 +857,8 @@ Hardware error (FC timeout, USB disconnect)
 | Area | Files | Tests |
 |------|-------|-------|
 | Blackbox Parser | 9 | 245 |
-| FFT Analysis (+ Data Quality + Spectrogram + Delay + Throttle Utils) | 9 | 313 |
-| Step Response + PID + TF + CrossAxis + PropWash + DTerm + Bayesian + Verification + Golden Outputs | 21 | 758 |
+| FFT Analysis (+ Data Quality + Spectrogram + Delay + Throttle Utils + RPM Rules + Filter Response + BF Capabilities) | 11 | 373 |
+| Step Response + PID + TF + CrossAxis + PropWash + DTerm + Bayesian + Verification + Golden Outputs + Stacker + SysID + Placement | 25 | 806 |
 | Header Validation + Constants + Main Utils | 3 | 82 |
 | MSP Protocol & Client | 4 | 196 |
 | MSC (Mass Storage) | 2 | 45 |
@@ -863,7 +869,7 @@ Hardware error (FC timeout, USB disconnect)
 | Diagnostic | 1 | 12 |
 | License | 1 | 12 |
 | Auto-Updater | 1 | 12 |
-| UI Components + Charts + Contexts | 56 | 829 |
+| UI Components + Charts + Contexts | 57 | 848 |
 | React Hooks + Utils | 18 | 197 |
 | Shared Constants & Utils | 5 | 102 |
 | E2E Workflows (Vitest) | 1 | 31 |
