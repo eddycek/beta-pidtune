@@ -1,8 +1,10 @@
 # Tuning Algorithms Audit & Improvement Roadmap
 
-> **Status**: Proposed
+> **Status**: Active
 
 Deep audit of FPVPIDlab's tuning algorithms (July 2026): DSP correctness review of `src/main/analysis/`, knowledge-base/apply/verification flow review, and a market benchmark against state-of-the-art tools (PIDtoolbox PRO v0.74, Plasmatree PID-Analyzer, Betaflight Blackbox Explorer 2025.12, FPVtune). Produces a phased roadmap toward being the best FPV tuning tool on the market.
+
+**Implementation status (July 2026)**: Phase 0 (P0.1) and all of Phase 1 (P1.1–P1.9) are ✅ implemented — calibrated v2 power spectrum with all dB thresholds recalibrated (`SPECTRUM_SCALE_VERSION = 2`), robust peak detection, size-aware frame-resonance bands, coherence computation + TF rule gating, quick-win batch, contiguity-safe throttle-binned FFT/TF, clean-segment prop-wash baseline, yaw coverage, and extended apply verification. Phases 2 and 3 remain proposed.
 
 **Overall assessment**: the architecture is solid and above average — convergent absolute-target filter recommendations, notch-aware resonance handling, quad-size bounds, second-flight verification with similarity matching, convergence detection, data quality scoring with confidence downgrades, and a knowledge base enforced as source of truth. The code faithfully implements the documented rules. However, the DSP core has correctness gaps and methodology shortfalls that SOTA tools handle better — chiefly step response without deconvolution/stacking, uncalibrated "PSD", dead coherence plumbing, and missing Betaflight 4.5/4.6 coverage.
 
@@ -68,23 +70,23 @@ Therefore: **all dB-domain fixes land behind one recalibration event (P1.1); the
 
 | ID | Item | Effort | Risk |
 |----|------|--------|------|
-| P0.1 | **Golden-output harness** — test running the full FilterAnalyzer + PIDAnalyzer + TransferFunctionEstimator pipelines over demo-generator BBLs and real-log fixtures; snapshots recommendations (setting/value/ruleId/confidence), noise floors, peak lists, and step metrics into JSON fixtures. Every subsequent PR diffs against these; fixtures are regenerated only in the two recalibration PRs. New `src/main/analysis/goldenOutputs.test.ts`. Extend the demo generator with known-amplitude injected sines so absolute calibration is testable. | S | Low |
+| P0.1 ✅ | **Golden-output harness** — test running the full FilterAnalyzer + PIDAnalyzer + TransferFunctionEstimator pipelines over demo-generator BBLs and real-log fixtures; snapshots recommendations (setting/value/ruleId/confidence), noise floors, peak lists, and step metrics into JSON fixtures. Every subsequent PR diffs against these; fixtures are regenerated only in the two recalibration PRs. New `src/main/analysis/goldenOutputs.test.ts`. Extend the demo generator with known-amplitude injected sines so absolute calibration is testable. | S | Low |
 
 ### Phase 1 — DSP correctness + quick wins (one PR per item)
 
 | ID | Item | Fixes | Effort | Risk | Depends on |
 |----|------|-------|--------|------|-----------|
-| P1.1 | **Calibrated Welch PSD** — detrend segments, average in power domain, normalize by window energy and sample rate → true one-sided PSD in `FFTCompute.ts`. Recalibrate every dB threshold in the same PR (`constants.ts`, `FilterRecommender`, `MechanicalHealthChecker`, `PropWashDetector`, `DTermAnalyzer`, `DynamicLowpassRecommender`; relative dB deltas roughly double in power domain, absolute floors re-anchored via golden logs). Validate: injected sine of known amplitude matches theoretical PSD; golden diff shows unchanged recommendation *directions*. | A1 | M | **High** | P0.1 |
-| P1.2 | **Robust peak detection** — prominence-based with plateau handling (centroid of flat tops), ~15–20 Hz minimum spacing, parabolic interpolation for sub-bin frequency, median-band local floor. Validate with synthetic spectra (close peaks, plateaus, between-bin peaks). | A2 | M | Medium | P1.1 |
-| P1.3 | **Size-aware frame-resonance bands** — `Record<DroneSize, {min, max}>` (e.g. 7": 60–150, 5": 80–200, 3": 120–280, 2.5"/1": 150–350 Hz) threaded into `classifyPeak`. | A3 | S | Low | P1.2 |
-| P1.4 | **Coherence** — compute γ²(f) = |S_xy|²/(S_xx·S_yy) in `TransferFunctionEstimator` (cross/auto spectra already exist), pass per-axis mean from `PIDAnalyzer.extractViaWiener` into `DataQualityScorer` (dormant tests come alive); gate TF-derived rules (TF-1..TF-4) on coherence ≥ ~0.5 in-band. | A7, partially A8 | M | Low | P0.1 |
-| P1.5 | **Quick-win batch** — (a) dedupe `normalizeThrottle` into `src/shared/utils/`; (b) derive maxStickRate from the BBL rate profile, fallback 670; (c) mark ≤5" `simplified_dmax_gain=0` recommendation `informational: true`; (d) TF margins return `crossingFound: false` instead of silent 60/90 caps, consumers downgrade confidence. | A11, B, A8 | S | Low | P0.1 |
-| P1.6 | **Contiguity-safe throttle-binned FFT** — collect whole FFT windows lying entirely within contiguous runs of a throttle band; average per-window PSDs; bands with too few windows report insufficient data. | A5 | M | Medium | P1.1 |
-| P1.7 | **Prop-wash baseline fix** — compute the 20–90 Hz baseline from clean (hover/cruise) segments exposed by `SegmentSelector` instead of the whole flight; verify severity-tier ratios against golden logs. | A10 | M | Medium | P1.1 |
-| P1.8 | **Yaw coverage** — include yaw in noise and steadiness analysis with yaw-specific expectations (no D rules; damping-ratio validation stays roll/pitch-only by design, documented in KB). | A11 | M | Medium | P1.1 |
-| P1.9 | **Verify-applied coverage** — parse the MSP_PID_ADVANCED offsets already present in `mspLayouts.ts` (tpa, anti-gravity, thrust_linear, dyn_idle, pidsum, vbat_sag, simplified_dmax_gain, dterm dyn expo) and remove them from `FF_CLI_ONLY` so applied values are actually verified. | B | M | Low | — |
+| P1.1 ✅ | **Calibrated Welch PSD** — detrend segments, average in power domain, normalize by window energy and sample rate → true one-sided PSD in `FFTCompute.ts`. Recalibrate every dB threshold in the same PR (`constants.ts`, `FilterRecommender`, `MechanicalHealthChecker`, `PropWashDetector`, `DTermAnalyzer`, `DynamicLowpassRecommender`; relative dB deltas roughly double in power domain, absolute floors re-anchored via golden logs). Validate: injected sine of known amplitude matches theoretical PSD; golden diff shows unchanged recommendation *directions*. | A1 | M | **High** | P0.1 |
+| P1.2 ✅ | **Robust peak detection** — prominence-based with plateau handling (centroid of flat tops), ~15–20 Hz minimum spacing, parabolic interpolation for sub-bin frequency, median-band local floor. Validate with synthetic spectra (close peaks, plateaus, between-bin peaks). | A2 | M | Medium | P1.1 |
+| P1.3 ✅ | **Size-aware frame-resonance bands** — `Record<DroneSize, {min, max}>` (e.g. 7": 60–150, 5": 80–200, 3": 120–280, 2.5"/1": 150–350 Hz) threaded into `classifyPeak`. | A3 | S | Low | P1.2 |
+| P1.4 ✅ | **Coherence** — compute γ²(f) = |S_xy|²/(S_xx·S_yy) in `TransferFunctionEstimator` (cross/auto spectra already exist), pass per-axis mean from `PIDAnalyzer.extractViaWiener` into `DataQualityScorer` (dormant tests come alive); gate TF-derived rules (TF-1..TF-4) on coherence ≥ ~0.5 in-band. | A7, partially A8 | M | Low | P0.1 |
+| P1.5 ✅ | **Quick-win batch** — (a) dedupe `normalizeThrottle` into `src/shared/utils/`; (b) derive maxStickRate from the BBL rate profile, fallback 670; (c) mark ≤5" `simplified_dmax_gain=0` recommendation `informational: true`; (d) TF margins return `crossingFound: false` instead of silent 60/90 caps, consumers downgrade confidence. | A11, B, A8 | S | Low | P0.1 |
+| P1.6 ✅ | **Contiguity-safe throttle-binned FFT** — collect whole FFT windows lying entirely within contiguous runs of a throttle band; average per-window PSDs; bands with too few windows report insufficient data. | A5 | M | Medium | P1.1 |
+| P1.7 ✅ | **Prop-wash baseline fix** — compute the 20–90 Hz baseline from clean (hover/cruise) segments exposed by `SegmentSelector` instead of the whole flight; verify severity-tier ratios against golden logs. | A10 | M | Medium | P1.1 |
+| P1.8 ✅ | **Yaw coverage** — include yaw in noise and steadiness analysis with yaw-specific expectations (no D rules; damping-ratio validation stays roll/pitch-only by design, documented in KB). | A11 | M | Medium | P1.1 |
+| P1.9 ✅ | **Verify-applied coverage** — parse the MSP_PID_ADVANCED offsets already present in `mspLayouts.ts` (tpa, anti-gravity, thrust_linear, dyn_idle, pidsum, vbat_sag, simplified_dmax_gain, dterm dyn expo) and remove them from `FF_CLI_ONLY` so applied values are actually verified. | B | M | Low | — |
 
-**Phase 1 exit criteria**: golden outputs stable across reruns; calibration unit tests green; `/tuning-advisor` audit passed; real-log recommendation directions unchanged vs pre-Phase-1.
+**Phase 1 exit criteria**: golden outputs stable across reruns; calibration unit tests green; `/tuning-advisor` audit passed; real-log recommendation directions unchanged vs pre-Phase-1. ✅ **Phase 0 and Phase 1 complete** — golden fixtures live in `src/main/analysis/__fixtures__/golden/` (regenerate via `UPDATE_GOLDEN=1`).
 
 ### Phase 2 — SOTA parity
 

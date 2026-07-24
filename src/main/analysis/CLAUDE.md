@@ -33,8 +33,8 @@ Noise analysis, step response, transfer function, and data quality scoring modul
 ### Additional Analysis Modules
 
 - **DTermAnalyzer**: D-term effectiveness via FFT energy ratio in 20-150 Hz band. Used for D-increase gating
-- **FeedforwardAnalyzer**: RC-link-aware FF baseline + step-response refinement (smooth/jitter factors)
-- **MechanicalHealthChecker**: Pre-tuning diagnostics — extreme noise, axis asymmetry, motor imbalance. Extreme-noise threshold is size-aware: `max(-20 dB, NOISE_LEVEL_BY_SIZE[size].highDb + 5 dB)` — avoids false "damaged prop" flags on inherently noisy 1"/2.5" builds. Produces mechanical-health flags consumed by analyzers (may lower confidence or add warnings)
+- **FeedforwardAnalyzer**: RC-link-aware FF baseline + step-response refinement (smooth/jitter factors). Small/large-step split uses `deriveMaxStickRate()` — max |setpoint| observed in flight (floor 300 deg/s, fallback 670 when no setpoint data) instead of a hardcoded 670
+- **MechanicalHealthChecker**: Pre-tuning diagnostics — extreme noise, axis asymmetry, motor imbalance. Extreme-noise threshold is size-aware: `max(-10 dB, NOISE_LEVEL_BY_SIZE[size].highDb + 5 dB)` on the v2 scale (5": -10 dB, 1" whoop: 0 dB) — avoids false "damaged prop" flags on inherently noisy 1"/2.5" builds. Produces mechanical-health flags consumed by analyzers (may lower confidence or add warnings)
 - **WindDisturbanceDetector**: Gyro variance analysis for environmental disturbance. Computes and attaches `windDisturbance` metric to analysis result
 - **BayesianPIDOptimizer**: Lightweight Gaussian Process surrogate for iterative PID tuning across sessions
 - **ThrottleTFAnalyzer**: Per-throttle-band transfer function (Wiener deconvolution) for TPA diagnostics (5 bands). Uses the longest contiguous run per band (min 2048 samples) — TF cross-spectra require an unbroken time series
@@ -60,3 +60,7 @@ Rates flight data quality 0-100 before generating recommendations. Integrated in
 ## Flight Quality Score (`src/shared/utils/tuneQualityScore.ts`)
 
 Composite 0-100 score with type-aware components (noise floor, overshoot, settling, bandwidth, phase margin). Points redistributed evenly among available components. Displayed as badge in TuningCompletionSummary and TuningHistoryPanel.
+
+## Golden-Output Regression Harness (`goldenOutputs.test.ts`)
+
+Runs the full FilterAnalyzer + PIDAnalyzer + TransferFunctionEstimator pipelines over demo-generator BBLs and real VX3.5 logs and snapshot-compares recommendations (setting/value/ruleId/confidence), noise floors, peak lists, and step metrics against `__fixtures__/golden/*.json`. Any analysis change that shifts outputs fails these tests. Regenerate fixtures deliberately with `UPDATE_GOLDEN=1 npx vitest run src/main/analysis/goldenOutputs.test.ts` — only in recalibration PRs (see `docs/TUNING_ALGORITHMS_AUDIT.md`).

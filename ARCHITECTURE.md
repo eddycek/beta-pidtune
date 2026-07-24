@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Updated:** July 6, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3189 unit tests, 145 files + 37 Playwright E2E tests**
+**Last Updated:** July 24, 2026 | **Phase 4 Complete, Phase 6 Complete** | **3243 unit tests (3220 passing + 23 skipped), 147 files + 37 Playwright E2E tests**
 
 ---
 
@@ -57,8 +57,8 @@
 │  │  ┌───┴──────────┐  ┌─────────────────┐  ┌──────────────────┐      │  │
 │  │  │MSPConnection │  │ BlackboxParser  │  │ Analysis Engine │      │  │
 │  │  │ + CLI Mode   │  │ (6 modules,     │  │ FFT + Step Resp │      │  │
-│  │  │ + fcEntered  │  │  227 tests)     │  │ (26 modules,    │      │  │
-│  │  │   CLI flag   │  │                 │  │  661 tests)     │      │  │
+│  │  │ + fcEntered  │  │  245 tests)     │  │ (27 modules,    │      │  │
+│  │  │   CLI flag   │  │                 │  │  1127 tests)    │      │  │
 │  │  └───┬──────────┘  └─────────────────┘  └──────────────────┘      │  │
 │  │      │                                                             │  │
 │  │  ┌───┴──────────┐                                                  │  │
@@ -287,22 +287,23 @@ Two independent analysis pipelines: **filter tuning** (FFT noise analysis) and *
 
 | File | Lines | Tests | Purpose |
 |------|-------|-------|---------|
-| `FFTCompute.ts` | 171 | 20 | Welch's method, Hanning window |
-| `SegmentSelector.ts` | 195 | 27 | Hover + throttle sweep detection |
-| `NoiseAnalyzer.ts` | 246 | 25 | Peak detection, noise classification |
-| `FilterRecommender.ts` | 627 | 80 | Noise-based filter targets, RPM-aware bounds, dynamic-lowpass-aware (tunes dyn_min/max when active), propwash floor, medium noise, notch-aware resonance, LPF2, preset gap analysis settings |
-| `FilterAnalyzer.ts` | 206 | 19 | Filter analysis orchestrator (data quality, throttle spectrogram, group delay) |
-| `ThrottleSpectrogramAnalyzer.ts` | — | 19 | Throttle-dependent spectrogram analysis |
-| `GroupDelayEstimator.ts` | — | 23 | Group delay estimation, filter latency measurement, uses dyn_min_hz when dynamic active |
-| `StepDetector.ts` | 142 | 16 | Derivative-based step input detection |
-| `StepMetrics.ts` | 330 | 38 | Rise time, overshoot, settling, trace, FF contribution, adaptive window |
-| `PIDRecommender.ts` | 430 | 207 | Flight-PID-anchored P/D recommendations, FF-aware, damping ratio, I-term, quad-size-aware bounds, D-min/TPA advisory, preset gap analysis settings |
-| `PIDAnalyzer.ts` | 185 | 21 | PID analysis orchestrator (FF context, data quality, cross-axis, propwash) |
-| `CrossAxisDetector.ts` | — | 20 | Cross-axis coupling detection |
-| `PropWashDetector.ts` | — | 16 | Propwash detection and analysis |
-| `DataQualityScorer.ts` | ~200 | 39 | Flight data quality scoring (0-100), confidence adjustment, low coherence warning |
-| `headerValidation.ts` | 94 | 28 | BB header diagnostics, version-aware debug mode, RPM enrichment, preset gap analysis fields |
-| `constants.ts` | 177 | — | All tunable thresholds |
+| `FFTCompute.ts` | 224 | 24 | Welch's method, detrended Hanning windows, power-domain averaging, calibrated one-sided power spectrum (v2 scale) |
+| `SegmentSelector.ts` | 375 | 31 | Hover + throttle sweep detection, yaw steadiness gating (1.5×) |
+| `NoiseAnalyzer.ts` | 342 | 36 | Peak detection (plateau handling, 15 Hz spacing, parabolic interpolation), size-aware noise classification |
+| `FilterRecommender.ts` | 1045 | 108 | Noise-based filter targets, RPM-aware bounds, dynamic-lowpass-aware (tunes dyn_min/max when active), propwash floor, medium noise, notch-aware resonance, LPF2, yaw-only resonance observation, preset gap analysis settings |
+| `FilterAnalyzer.ts` | 372 | 20 | Filter analysis orchestrator (data quality, throttle spectrogram, group delay) |
+| `ThrottleSpectrogramAnalyzer.ts` | 210 | 23 | Throttle-dependent spectrogram analysis (contiguous runs only) |
+| `GroupDelayEstimator.ts` | 216 | 28 | Group delay estimation, filter latency measurement, uses dyn_min_hz when dynamic active |
+| `StepDetector.ts` | 164 | 16 | Derivative-based step input detection |
+| `StepMetrics.ts` | 416 | 53 | Rise time, overshoot, settling, trace, FF contribution, adaptive window |
+| `PIDRecommender.ts` | 1840 | 266 | Flight-PID-anchored P/D recommendations, FF-aware, damping ratio, I-term, quad-size-aware bounds, D-min/TPA advisory, TF coherence gate, preset gap analysis settings |
+| `PIDAnalyzer.ts` | 640 | 28 | PID analysis orchestrator (FF context, data quality, cross-axis, propwash) |
+| `CrossAxisDetector.ts` | 162 | 20 | Cross-axis coupling detection |
+| `PropWashDetector.ts` | 367 | 20 | Propwash detection and analysis (clean-segment baseline) |
+| `DataQualityScorer.ts` | 403 | 39 | Flight data quality scoring (0-100), confidence adjustment, low coherence warning |
+| `headerValidation.ts` | 300 | 45 | BB header diagnostics, version-aware debug mode, RPM enrichment, preset gap analysis fields |
+| `throttleUtils.ts` | 24 | 4 | Shared throttle normalization + contiguous-run finder |
+| `constants.ts` | 927 | 11 | All tunable thresholds (validated by `constants.test.ts`) |
 
 #### Filter Analysis Pipeline
 
@@ -314,14 +315,14 @@ BlackboxFlightData → SegmentSelector → FFTCompute → NoiseAnalyzer → Filt
 ```
 
 **SegmentSelector** finds stable hover segments and throttle sweeps:
-- Hover: throttle 15–75%, gyro std < 50 deg/s, min 0.5s duration
+- Hover: throttle 15–75%, roll/pitch gyro std < 50 deg/s (yaw < 75 deg/s — 1.5× relaxed), min 0.5s duration
 - Sweeps: throttle range > 40%, 2–15s duration, monotonic check
 - Prefers sweeps over hovers when available
 
-**FFTCompute**: Hanning window, Welch's method (50% overlap, 4096-sample window), returns `PowerSpectrum { frequencies, magnitudes }` (Float64Array)
+**FFTCompute**: detrended Hanning windows, Welch's method (50% overlap, 4096-sample window, power-domain averaging), returns a calibrated one-sided power spectrum `PowerSpectrum { frequencies, magnitudes }` (Float64Array). Spectrum scale v2 (`SPECTRUM_SCALE_VERSION = 2`): a sine of amplitude A reads 10·log10(A²/2); dB values sit ≈10 dB above the legacy v1 amplitude-averaged scale.
 
-**NoiseAnalyzer** detects peaks by prominence (> 6 dB above local floor) and classifies:
-- **Frame resonance**: 80–200 Hz
+**NoiseAnalyzer** detects peaks by prominence (> 6 dB above local floor, plateau-aware, 15 Hz minimum spacing, parabolic sub-bin interpolation) and classifies:
+- **Frame resonance**: size-aware `FRAME_RESONANCE_BY_SIZE` band (5": 80–200 Hz, 1"/2.5": 150–350 Hz, 7": 60–150 Hz)
 - **Motor harmonics**: equally-spaced peaks (≥ 3 peaks)
 - **Electrical noise**: > 500 Hz
 
@@ -330,9 +331,9 @@ Noise floor: 25th percentile of magnitude spectrum.
 **FilterRecommender** — convergent noise-based targeting:
 
 ```
-Target cutoff = linear interpolation:
-  noiseFloorDb = -10 dB → min cutoff (very noisy)
-  noiseFloorDb = -70 dB → max cutoff (very clean)
+Target cutoff = linear interpolation (v2 power-spectrum scale):
+  noiseFloorDb =   0 dB → min cutoff (very noisy)
+  noiseFloorDb = -60 dB → max cutoff (very clean)
 
 Safety bounds (RPM-aware):
   Gyro LPF1:  75–300 Hz (75–500 Hz with RPM filter)
@@ -365,7 +366,7 @@ BBL rawHeaders → extractFeedforwardContext() → FeedforwardContext
 
 **StepDetector** finds sharp stick inputs:
 - Derivative threshold: 500 deg/s/s
-- Minimum magnitude: 100 deg/s
+- Minimum magnitude: 150 deg/s
 - Hold time: ≥ 50ms, cooldown: ≥ 100ms between steps
 
 **StepMetrics** computes per-step response quality:
@@ -845,26 +846,27 @@ Hardware error (FC timeout, USB disconnect)
 
 ## Testing Strategy
 
-**3189 unit tests across 145 files + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
+**3243 unit tests across 147 files (3220 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests**. See [TESTING.md](./TESTING.md) for complete inventory.
 
 | Area | Files | Tests |
 |------|-------|-------|
 | Blackbox Parser | 9 | 245 |
-| FFT Analysis (+ Data Quality + Spectrogram + Delay) | 8 | 278 |
-| Step Response + PID + TF + CrossAxis + PropWash + DTerm + Bayesian + Verification | 19 | 604 |
-| Header Validation + Constants + Main Utils | 3 | 65 |
-| MSP Protocol & Client | 4 | 194 |
+| FFT Analysis (+ Data Quality + Spectrogram + Delay + Throttle Utils) | 9 | 313 |
+| Step Response + PID + TF + CrossAxis + PropWash + DTerm + Bayesian + Verification + Golden Outputs | 21 | 758 |
+| Header Validation + Constants + Main Utils | 3 | 82 |
+| MSP Protocol & Client | 4 | 196 |
 | MSC (Mass Storage) | 2 | 45 |
-| Storage Managers | 7 | 142 |
-| IPC Handlers | 4 | 140 |
+| Storage Managers | 7 | 123 |
+| IPC Handlers | 4 | 152 |
+| FC State Cache | 1 | 17 |
 | Telemetry | 2 | 38 |
 | Diagnostic | 1 | 12 |
 | License | 1 | 12 |
 | Auto-Updater | 1 | 12 |
-| UI Components + Charts + Contexts | 51 | 809 |
-| React Hooks + Utils | 17 | 185 |
+| UI Components + Charts + Contexts | 56 | 829 |
+| React Hooks + Utils | 18 | 197 |
 | Shared Constants & Utils | 5 | 102 |
-| E2E Workflows (Vitest) | 4 | 105 |
+| E2E Workflows (Vitest) | 1 | 31 |
 | Demo Mode (Vitest) | 2 | 79 |
 | **Playwright E2E** | **7** | **37** |
 

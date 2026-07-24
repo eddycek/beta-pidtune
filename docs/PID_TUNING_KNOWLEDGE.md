@@ -526,7 +526,7 @@ Works from **any flight data** — no dedicated maneuvers needed. Pioneered by P
 
 ### Noise Floor Scale (FPVPIDlab-Specific)
 
-FPVPIDlab uses a **calibrated one-sided power spectrum** (`SPECTRUM_SCALE_VERSION = 2` in `constants.ts`): segments are detrended (mean removed), Hanning-windowed, normalized by coherent window gain ((Σw)²), Welch-averaged in the power domain, and reported as `10·log10(power)` in dB re (deg/s)². Calibration: a sine of amplitude A reads exactly `10·log10(A²/2)` at its bin, independent of FFT size and sample rate; white-noise floors depend only on FFT size (per-bin power ≈ 2σ²·ENBW/N ≈ 3σ²/N for Hanning), not sample rate. The scale sits ≈10 dB above the legacy v1 amplitude-averaged scale and is still **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently. Metrics stored by v1 app versions are ≈10 dB lower than v2 values for the same flight.
+FPVPIDlab uses a **calibrated one-sided power spectrum** (`SPECTRUM_SCALE_VERSION = 2` in `src/shared/constants.ts`, re-exported from the analysis `constants.ts`; stamped into stored `FilterMetricsSummary` records so cross-version comparisons can be refused): segments are detrended (mean removed), Hanning-windowed, normalized by coherent window gain ((Σw)²), Welch-averaged in the power domain, and reported as `10·log10(power)` in dB re (deg/s)². Calibration: a sine of amplitude A reads exactly `10·log10(A²/2)` at its bin, independent of FFT size and sample rate; white-noise floors depend only on FFT size (per-bin power ≈ 2σ²·ENBW/N ≈ 3σ²/N for Hanning), not sample rate. The scale sits ≈10 dB above the legacy v1 amplitude-averaged scale and is still **not directly comparable** to BF Explorer or PIDtoolbox dB values — each tool normalizes differently. Metrics stored by v1 app versions are ≈10 dB lower than v2 values for the same flight.
 
 | FPVPIDlab dB (v2) | Internal Classification | Mapping Rationale |
 |-----------|----------------------|-------------------|
@@ -591,7 +591,7 @@ FPVPIDlab's noise-to-cutoff interpolation range: **-60 dB (cleanest) to 0 dB (no
 **Rule 4: RPM-Aware Dynamic Notch Simplification** (when RPM filter active)
 - **Size-aware count target**: sub-5" quads → 2 notches (more complex vibration coupling), 5"+ → 1 notch. If dyn_notch_count > target: step down toward the target, at most **2 per iteration** (`DYN_NOTCH_COUNT_MAX_STEP`) — dropping 5→1 at once can regress axes where removed notches tracked real peaks
 - **Conditional Q recommendation**:
-  - If strong frame resonance detected (≥12 dB peaks in 80-200 Hz): keep Q=300 (wider notch needed to catch broad resonance) — medium confidence
+  - If strong frame resonance detected (≥12 dB peaks classified `frame_resonance` — size-aware band, 5": 80-200 Hz): keep Q=300 (wider notch needed to catch broad resonance) — medium confidence
   - Otherwise: recommend Q=500 (narrower notch, less signal distortion)
 - *Rationale*: With RPM handling motor harmonics, the dynamic notch only needs to catch frame resonance — 1 narrow notch suffices on 5"+; small builds keep 2. Community consensus supports simplification (UAV Tech, BF 4.3+ notes); the per-size split and max step are FPVPIDlab house choices.
 

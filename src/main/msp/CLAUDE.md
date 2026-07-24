@@ -57,6 +57,11 @@ Never guess byte offsets — always cross-reference with the configurator source
 - Auto-read in analysis handlers when FC connected and settings not provided
 - Byte layout verified against betaflight-configurator MSPHelper.js
 
+## MSP PID Advanced (`MSP_PID_ADVANCED`, command 94)
+
+- `getFeedforwardConfiguration()` parses the base layout (FF boost/smooth/jitter/max-rate-limit, d_min per axis + gain/advance, iterm_relax type/cutoff, `feedforward_averaging`, `dyn_idle_min_rpm`) plus length-gated extended fields: `vbat_sag_compensation` and `thrust_linear` when the response reaches their offsets, and `anti_gravity_gain`/`tpa_mode`/`tpa_rate`/`tpa_breakpoint` from the 61-byte API 1.45+ layout (a response long enough for TPA also guarantees the ≥1.45 meaning of anti_gravity_gain @21)
+- These parsed fields feed `verifyAppliedConfig()` post-apply read-back — on older firmware without the extended layout the settings land in `unchecked` instead of failing verification
+
 ## MSP Dataflash Read (`MSP_DATAFLASH_READ`, command 0x46)
 
 - Response format: `[4B readAddress LE][2B dataSize LE][1B isCompressed (BF4.1+)][flash data]`
