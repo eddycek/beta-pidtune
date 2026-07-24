@@ -1,0 +1,145 @@
+{
+  "analysisMethod": "wiener_deconvolution",
+  "stepsDetected": 0,
+  "roll": {
+    "responses": 0,
+    "meanOvershoot": 0,
+    "meanRiseTimeMs": 118,
+    "meanSettlingTimeMs": 175,
+    "meanLatencyMs": 0,
+    "meanSteadyStateError": 0
+  },
+  "pitch": {
+    "responses": 0,
+    "meanOvershoot": 1.2,
+    "meanRiseTimeMs": 53,
+    "meanSettlingTimeMs": 161,
+    "meanLatencyMs": 0,
+    "meanSteadyStateError": 0
+  },
+  "yaw": {
+    "responses": 0,
+    "meanOvershoot": 0,
+    "meanRiseTimeMs": 148,
+    "meanSettlingTimeMs": 190,
+    "meanLatencyMs": 0,
+    "meanSteadyStateError": 0
+  },
+  "dataQuality": {
+    "tier": "good",
+    "overall": 70
+  },
+  "transferFunctionMetrics": {
+    "roll": {
+      "bandwidthHz": 4,
+      "phaseMarginDeg": 179,
+      "gainMarginDb": 60,
+      "dcGainDb": -6.2,
+      "overshootPercent": 0,
+      "riseTimeMs": 118,
+      "settlingTimeMs": 175
+    },
+    "pitch": {
+      "bandwidthHz": 16,
+      "phaseMarginDeg": 175,
+      "gainMarginDb": 60,
+      "dcGainDb": -0.7,
+      "overshootPercent": 1,
+      "riseTimeMs": 53,
+      "settlingTimeMs": 161
+    },
+    "yaw": {
+      "bandwidthHz": 4,
+      "phaseMarginDeg": 90,
+      "gainMarginDb": 60,
+      "dcGainDb": -14,
+      "overshootPercent": 0,
+      "riseTimeMs": 148,
+      "settlingTimeMs": 190
+    }
+  },
+  "warningCodes": [
+    "feedforward_active",
+    "low_logging_rate",
+    "tpa_variance"
+  ],
+  "recommendations": [
+    {
+      "setting": "dyn_idle_min_rpm",
+      "currentValue": 0,
+      "recommendedValue": 45,
+      "ruleId": "P-DYN-IDLE",
+      "confidence": "low"
+    },
+    {
+      "setting": "pid_pitch_i",
+      "currentValue": 84,
+      "recommendedValue": 89,
+      "ruleId": "TF-4-I-pitch",
+      "confidence": "low"
+    },
+    {
+      "setting": "pid_pitch_p",
+      "currentValue": 47,
+      "recommendedValue": 52,
+      "ruleId": "TF-3-P-pitch",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_roll_i",
+      "currentValue": 80,
+      "recommendedValue": 90,
+      "ruleId": "TF-4-I-roll",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_roll_p",
+      "currentValue": 45,
+      "recommendedValue": 50,
+      "ruleId": "TF-3-P-roll",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_yaw_i",
+      "currentValue": 80,
+      "recommendedValue": 90,
+      "ruleId": "TF-4-I-yaw",
+      "confidence": "medium"
+    },
+    {
+      "setting": "pid_yaw_p",
+      "currentValue": 45,
+      "recommendedValue": 50,
+      "ruleId": "TF-3-P-yaw",
+      "confidence": "medium"
+    },
+    {
+      "setting": "simplified_dmax_gain",
+      "currentValue": 1,
+      "recommendedValue": 0,
+      "ruleId": "P-DMAX-INFO",
+      "confidence": "low"
+    },
+    {
+      "setting": "thrust_linear",
+      "currentValue": 0,
+      "recommendedValue": 40,
+      "ruleId": "P-THRUST-LIN",
+      "confidence": "low"
+    },
+    {
+      "setting": "tpa_low_always",
+      "currentValue": 0,
+      "recommendedValue": 1,
+      "ruleId": "P-TPA",
+      "confidence": "low"
+    },
+    {
+      "setting": "vbat_sag_compensation",
+      "currentValue": 0,
+      "recommendedValue": 75,
+      "ruleId": "P-VBAT-SAG",
+      "confidence": "low"
+    }
+  ]
+}

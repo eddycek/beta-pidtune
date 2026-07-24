@@ -1,0 +1,48 @@
+{
+  "overallLevel": "medium",
+  "roll": {
+    "noiseFloorDb": -36.9,
+    "peaks": []
+  },
+  "pitch": {
+    "noiseFloorDb": -33,
+    "peaks": []
+  },
+  "yaw": {
+    "noiseFloorDb": -33.4,
+    "peaks": []
+  },
+  "segmentsUsed": 5,
+  "dataQuality": {
+    "tier": "excellent",
+    "overall": 100
+  },
+  "groupDelay": {
+    "gyroTotalMs": 0.99,
+    "dtermTotalMs": 1.82
+  },
+  "warningCodes": [],
+  "recommendations": [
+    {
+      "setting": "dterm_lpf1_dyn_max_hz",
+      "currentValue": 150,
+      "recommendedValue": 300,
+      "ruleId": "F-NF-M-DTERM",
+      "confidence": "low"
+    },
+    {
+      "setting": "dterm_lpf1_dyn_min_hz",
+      "currentValue": 75,
+      "recommendedValue": 150,
+      "ruleId": "F-NF-M-DTERM",
+      "confidence": "low"
+    },
+    {
+      "setting": "rpm_filter_q",
+      "currentValue": 500,
+      "recommendedValue": 850,
+      "ruleId": "F-RPM-Q",
+      "confidence": "low"
+    }
+  ]
+}

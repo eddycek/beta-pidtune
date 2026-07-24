@@ -1,0 +1,116 @@
+{
+  "overallLevel": "high",
+  "roll": {
+    "noiseFloorDb": -18.8,
+    "peaks": [
+      {
+        "frequency": 160,
+        "amplitude": 37.6,
+        "type": "frame_resonance"
+      },
+      {
+        "frequency": 320,
+        "amplitude": 29.6,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 600,
+        "amplitude": 23.2,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 45,
+        "amplitude": 15.6,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 27,
+        "amplitude": 7.7,
+        "type": "unknown"
+      }
+    ]
+  },
+  "pitch": {
+    "noiseFloorDb": -18.8,
+    "peaks": [
+      {
+        "frequency": 160,
+        "amplitude": 37.8,
+        "type": "frame_resonance"
+      },
+      {
+        "frequency": 320,
+        "amplitude": 29.7,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 600,
+        "amplitude": 23.4,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 45,
+        "amplitude": 13.7,
+        "type": "motor_harmonic"
+      },
+      {
+        "frequency": 27,
+        "amplitude": 7.7,
+        "type": "unknown"
+      }
+    ]
+  },
+  "yaw": {
+    "noiseFloorDb": -18.8,
+    "peaks": [
+      {
+        "frequency": 160,
+        "amplitude": 37.8,
+        "type": "frame_resonance"
+      },
+      {
+        "frequency": 320,
+        "amplitude": 29.3,
+        "type": "unknown"
+      },
+      {
+        "frequency": 600,
+        "amplitude": 23,
+        "type": "electrical"
+      }
+    ]
+  },
+  "segmentsUsed": 2,
+  "dataQuality": {
+    "tier": "excellent",
+    "overall": 93
+  },
+  "groupDelay": {
+    "gyroTotalMs": 1.42,
+    "dtermTotalMs": 1.65
+  },
+  "warningCodes": [],
+  "recommendations": [
+    {
+      "setting": "dterm_lpf1_static_hz",
+      "currentValue": 150,
+      "recommendedValue": 70,
+      "ruleId": "F-RES-DTERM",
+      "confidence": "high"
+    },
+    {
+      "setting": "dyn_notch_min_hz",
+      "currentValue": 100,
+      "recommendedValue": 50,
+      "ruleId": "F-DN-MIN",
+      "confidence": "medium"
+    },
+    {
+      "setting": "gyro_lpf1_static_hz",
+      "currentValue": 250,
+      "recommendedValue": 75,
+      "ruleId": "F-RES-GYRO",
+      "confidence": "high"
+    }
+  ]
+}
