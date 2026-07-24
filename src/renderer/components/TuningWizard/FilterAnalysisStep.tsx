@@ -135,14 +135,24 @@ export function FilterAnalysisStep({
         </div>
 
         {filterResult.mechanicalHealth &&
-          filterResult.mechanicalHealth.status !== 'ok' &&
+          filterResult.mechanicalHealth.issues.length > 0 &&
           filterResult.mechanicalHealth.issues.map((issue, i) => (
             <div
               key={i}
-              className={`analysis-warning analysis-warning--${issue.severity === 'critical' ? 'error' : 'warning'}`}
+              className={`analysis-warning analysis-warning--${
+                issue.severity === 'critical'
+                  ? 'error'
+                  : issue.severity === 'info'
+                    ? 'info'
+                    : 'warning'
+              }`}
             >
               <span className="analysis-warning-icon">
-                {issue.severity === 'critical' ? '\u274C' : '\u26A0\uFE0F'}
+                {issue.severity === 'critical'
+                  ? '\u274C'
+                  : issue.severity === 'info'
+                    ? '\u2139\uFE0F'
+                    : '\u26A0\uFE0F'}
               </span>
               <span>{issue.message}</span>
             </div>

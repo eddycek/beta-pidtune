@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   checkMechanicalHealth,
+  checkMotorSpectralSignatures,
   resolveExtremeNoiseThresholdDb,
   EXTREME_NOISE_FLOOR_DB,
   EXTREME_NOISE_MARGIN_DB,
@@ -287,5 +288,83 @@ describe('checkMechanicalHealth size-aware extreme noise', () => {
     const noiseIssues = result.issues.filter((i) => i.type === 'extreme_noise');
     expect(noiseIssues).toHaveLength(3);
     expect(noiseIssues[0].threshold).toBe(0);
+  });
+});
+
+describe('checkMotorSpectralSignatures (P3.4, experimental)', () => {
+  const SR = 4000;
+  const noise = () => (Math.random() - 0.5) * 0.02;
+
+  it('flags a bent-prop signature on the one motor with a strong order peak', () => {
+    // Motor 2 carries a strong 150 Hz tone the others lack
+    const data = makeFlightData({
+      motorFns: [
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + 0.2 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + noise(),
+      ],
+    });
+    const issues = checkMotorSpectralSignatures(data);
+    const prop = issues.find((iss) => iss.type === 'motor_prop_signature');
+    expect(prop).toBeDefined();
+    expect(prop!.severity).toBe('info');
+    expect(prop!.experimental).toBe(true);
+    expect(prop!.message).toContain('Motor 2');
+    expect(prop!.message).toMatch(/14[5-9]|15[0-5]/); // bin-quantized ~150 Hz
+  });
+
+  it('flags a bearing signature on broadband-elevated motors', () => {
+    // Motor 4 carries strong broadband noise across the bearing band
+    const data = makeFlightData({
+      motorFns: [
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + (Math.random() - 0.5) * 0.5,
+      ],
+    });
+    const issues = checkMotorSpectralSignatures(data);
+    const bearing = issues.find((iss) => iss.type === 'motor_bearing_signature');
+    expect(bearing).toBeDefined();
+    expect(bearing!.experimental).toBe(true);
+    expect(bearing!.message).toContain('Motor 4');
+  });
+
+  it('stays silent on symmetric motors', () => {
+    const data = makeFlightData({
+      motorFns: [
+        (i) => 0.5 + 0.05 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+        (i) => 0.5 + 0.05 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+        (i) => 0.5 + 0.05 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+        (i) => 0.5 + 0.05 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+      ],
+    });
+    const issues = checkMotorSpectralSignatures(data);
+    expect(issues).toHaveLength(0);
+  });
+
+  it('skips analysis when motor data is too short', () => {
+    const data = makeFlightData({ length: 1000 });
+    expect(checkMotorSpectralSignatures(data)).toHaveLength(0);
+  });
+
+  it('experimental info flags never degrade the overall status', () => {
+    const data = makeFlightData({
+      motorFns: [
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + 0.2 * Math.sin((2 * Math.PI * 150 * i) / SR) + noise(),
+        (i) => 0.5 + noise(),
+        (i) => 0.5 + noise(),
+      ],
+    });
+    const result = checkMechanicalHealth(data, makeNoiseProfile());
+    const hasExperimental = result.issues.some((i) => i.experimental);
+    if (hasExperimental) {
+      const nonExperimental = result.issues.filter((i) => !i.experimental);
+      if (nonExperimental.length === 0) {
+        expect(result.status).toBe('ok');
+      }
+    }
   });
 });

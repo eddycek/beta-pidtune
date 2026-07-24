@@ -167,7 +167,7 @@ npm run test:ui           # Visual interface with DOM snapshots
 
 ## Test Inventory
 
-**Total: 3365 unit tests across 154 files (3342 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
+**Total: 3370 unit tests across 154 files (3347 passing + 23 skipped fixture-gated) + 37 Playwright E2E tests across 7 spec files** (last verified: July 24, 2026)
 
 Per-file counts below include skipped tests (as reported by `vitest run`). The 23 skipped tests live in `blackbox/realflight.regression.test.ts` (13) and `analysis/AnalysisPipeline.realdata.test.ts` (10) — they require optional local BBL fixtures.
 
@@ -383,7 +383,7 @@ Per-file counts below include skipped tests (as reported by `vitest run`). The 2
 | `analysis/PropWashDetector.test.ts` | 20 | Propwash detection, wash-out frequency analysis, clean-segment baseline (computeCleanRuns, whole-flight fallback) |
 | `analysis/DTermAnalyzer.test.ts` | 8 | D-term effectiveness, energy ratio computation, dCritical flag |
 | `analysis/WindDisturbanceDetector.test.ts` | 11 | Wind/disturbance detection, gyro variance during hover, calm/moderate/windy classification, per-axis independence, hover-only analysis, multiple segments |
-| `analysis/MechanicalHealthChecker.test.ts` | 21 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback) |
+| `analysis/MechanicalHealthChecker.test.ts` | 26 | Mechanical health diagnostic, extreme noise detection, axis asymmetry, motor imbalance, combined issues, threshold edge cases, size-aware extreme-noise threshold (resolveExtremeNoiseThresholdDb: whoop 0 dB vs 5" -10 dB, undefined fallback), per-motor spectral fault signatures (bent-prop order peak, bearing broadband, symmetric silence, short-data skip, experimental flags never degrade status) |
 | `analysis/DynamicLowpassRecommender.test.ts` | 31 | Dynamic lowpass analysis, throttle-noise correlation, recommendation generation (gyro + D-term), threshold validation, structured ruleId, disable hysteresis (4 dB threshold, 4-6 dB gray zone leaves config untouched) |
 | `analysis/SliderMapper.test.ts` | 16 | Slider-aligned PID mapping, master multiplier, PD ratio, buildRecommendedPIDs, slider delta computation |
 | `analysis/FilterPlacementOptimizer.test.ts` | 9 | Filter placement optimizer (P3.3): notch-vs-lowpass tradeoff, infeasible low-frequency peak, LPF1-off requires RPM, delay delta vs current config, residual target, advisory emission (improvement threshold, near-optimal silence, infeasible silence) |

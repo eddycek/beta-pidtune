@@ -879,12 +879,17 @@ export interface DynamicLowpassAnalysis {
 // ---- Mechanical Health Types ----
 
 /** Severity of a mechanical health issue */
-export type HealthSeverity = 'ok' | 'warning' | 'critical';
+export type HealthSeverity = 'ok' | 'info' | 'warning' | 'critical';
 
 /** A detected mechanical health issue */
 export interface MechanicalHealthIssue {
   /** Type of detected issue */
-  type: 'extreme_noise' | 'axis_asymmetry' | 'motor_imbalance';
+  type:
+    | 'extreme_noise'
+    | 'axis_asymmetry'
+    | 'motor_imbalance'
+    | 'motor_prop_signature'
+    | 'motor_bearing_signature';
   /** Severity level */
   severity: HealthSeverity;
   /** Human-readable description */
@@ -895,6 +900,9 @@ export interface MechanicalHealthIssue {
   measuredValue: number;
   /** Threshold that was exceeded */
   threshold: number;
+  /** Experimental per-motor spectral signature (P3.4) — thresholds are still
+   * being calibrated via telemetry; treat as a hint, not a diagnosis */
+  experimental?: boolean;
 }
 
 /** Mechanical health diagnostic result */
