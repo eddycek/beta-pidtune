@@ -168,7 +168,11 @@ export async function analyze(
 
   await yieldToEventLoop();
 
-  // Step 4: Generate recommendations
+  // Step 4: Estimate group delay first — the LPF2 rules weigh it against the
+  // per-size latency budget
+  const groupDelay = estimateGroupDelay(currentSettings, undefined, options?.droneSize);
+
+  // Step 5: Generate recommendations
   onProgress?.({ step: 'recommending', percent: 85 });
   const rpmActive = isRpmFilterActive(currentSettings);
 
@@ -178,16 +182,14 @@ export async function analyze(
     noiseProfile,
     currentSettings,
     options?.droneSize,
-    confidenceContext
+    confidenceContext,
+    groupDelay
   );
   const recommendations = adjustFilterConfidenceByQuality(
     rawRecommendations,
     qualityResult.score.tier
   );
   const summary = generateSummary(noiseProfile, recommendations, rpmActive);
-
-  // Step 5: Estimate group delay
-  const groupDelay = estimateGroupDelay(currentSettings);
 
   // Step 6: Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);
@@ -289,15 +291,20 @@ async function analyzeEntireFlight(
 
   onProgress?.({ step: 'recommending', percent: 85 });
   const rpmActive = isRpmFilterActive(currentSettings);
-  const rawRecommendations = recommend(noiseProfile, currentSettings, options?.droneSize);
+  const groupDelay = estimateGroupDelay(currentSettings, undefined, options?.droneSize);
+  const rawRecommendations = recommend(
+    noiseProfile,
+    currentSettings,
+    options?.droneSize,
+    undefined,
+    groupDelay
+  );
   const recommendations = dataQuality
     ? adjustFilterConfidenceByQuality(rawRecommendations, dataQuality.tier)
     : rawRecommendations;
   const summary = generateSummary(noiseProfile, recommendations, rpmActive);
 
   onProgress?.({ step: 'recommending', percent: 100 });
-
-  const groupDelay = estimateGroupDelay(currentSettings);
 
   // Wind/disturbance detection
   const windDisturbance = analyzeWindDisturbance(flightData);

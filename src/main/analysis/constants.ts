@@ -849,6 +849,33 @@ export const RPM_FILTER_WEIGHTS_BY_SIZE: Record<DroneSize, [number, number, numb
   '7"': [90, 60, 90],
 };
 
+// ---- Filter Latency Budget (P2.7) ----
+// Per-size total group-delay budgets for the gyro and D-term filter chains at
+// the 80 Hz reference. LPF2 enable/disable decisions weigh measured delay
+// against these instead of acting on noise level alone. Anchors: BF community
+// "even 1 ms matters" for 5" racing; larger props have slower dynamics and
+// tolerate more delay; micros are inherently noisy and need filtering headroom.
+// House values (no direct community table exists).
+
+/** Per-chain latency budget in milliseconds */
+export interface FilterLatencyBudget {
+  gyroMs: number;
+  dtermMs: number;
+}
+
+export const FILTER_LATENCY_BUDGET_BY_SIZE: Record<DroneSize, FilterLatencyBudget> = {
+  '1"': { gyroMs: 2.5, dtermMs: 4.0 },
+  '2.5"': { gyroMs: 2.5, dtermMs: 4.0 },
+  '3"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '4"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '5"': { gyroMs: 1.5, dtermMs: 3.0 },
+  '6"': { gyroMs: 2.0, dtermMs: 3.5 },
+  '7"': { gyroMs: 2.5, dtermMs: 4.0 },
+};
+
+/** Fallback budget when drone size is unknown (matches the legacy 2 ms warning) */
+export const FILTER_LATENCY_BUDGET_DEFAULT: FilterLatencyBudget = { gyroMs: 2.0, dtermMs: 3.5 };
+
 // ---- D-term LPF Dynamic Expo ----
 // Source: docs/PID_TUNING_KNOWLEDGE.md Section 10 (Karate Race presets)
 // Higher expo = LPF cutoff rises faster with throttle = less D filtering at high throttle.

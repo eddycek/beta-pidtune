@@ -215,7 +215,7 @@ See [QUICK_START.md](./QUICK_START.md) for installation, setup, all available co
 
 All UI changes must include tests. Tests automatically run before commits. Coverage thresholds enforced: 80% lines/functions/statements, 75% branches.
 
-**Unit tests:** 3278 tests across 150 files (plus 23 skipped fixture-gated tests) — MSP protocol, storage managers, IPC handlers, UI components, hooks, BBL parser fuzz, analysis pipeline validation, golden-output regression, telemetry, diagnostic, license, auto-updater.
+**Unit tests:** 3287 tests across 150 files (plus 23 skipped fixture-gated tests) — MSP protocol, storage managers, IPC handlers, UI components, hooks, BBL parser fuzz, analysis pipeline validation, golden-output regression, telemetry, diagnostic, license, auto-updater.
 
 **Playwright E2E:** 37 tests across 7 spec files — launches real Electron app in demo mode, walks through complete tuning cycles (Filter Tune, PID Tune, Flash Tune, diagnostic reports, and stress-test edge cases).
 

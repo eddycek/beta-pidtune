@@ -281,6 +281,14 @@ export interface FilterGroupDelay {
   referenceFreqHz: number;
   /** Warning if total delay exceeds a safe threshold */
   warning?: string;
+  /** Per-size latency budget for the gyro chain in ms (P2.7) */
+  gyroBudgetMs?: number;
+  /** Per-size latency budget for the D-term chain in ms (P2.7) */
+  dtermBudgetMs?: number;
+  /** True when the gyro chain delay exceeds its budget */
+  gyroOverBudget?: boolean;
+  /** True when the D-term chain delay exceeds its budget */
+  dtermOverBudget?: boolean;
 }
 
 /** A steady flight segment identified from throttle/gyro data */
